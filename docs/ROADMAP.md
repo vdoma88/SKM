@@ -10,11 +10,11 @@
 - [x] FastAPI-сервис (`/api/select`, `/api/calculate`, `/api/iso1832/parse`).
 - [x] Интерактивный GUI-прототип (`static/index.html`) с картой стружколома, профилями станков и офлайн-движком.
 
-## Этап 2. Подключение PostgreSQL и расширение каталога
-- [ ] Реализовать async/sync PostgreSQL-адаптер в `app/repository.py` (psycopg3) поверх `v_insert_selector_catalog`.
-- [ ] Расширить базу ходовыми форм-факторами: `WNMG`, `DNMG`, `VNMG`, `SNMG`, `DCMT`, `VCMT`, `SEKT/SEMT`, `SPMG/SOMT`.
-- [ ] Добавить модуль поиска аналогов (Cross-Reference Engine) по таблице `insert_cross_references`.
-- [ ] Добавить расчёт шероховатости поверхности ($R_a \approx \frac{f_n^2}{32 \cdot r_\varepsilon}$) и прогиба расточных оправок по балочной модели ($L/D$).
+## Этап 2. Подключение PostgreSQL и расширение каталога (Выполнено)
+- [x] Реализован PostgreSQL-адаптер в `app/repository.py` (psycopg3) поверх `v_insert_selector_catalog`.
+- [x] База `db/seed.sql` расширена до 17 пластин (`WNMG`, `DNMG`, `VNMG`, `SNMG`, `DCMT`, `CNGA`, `SEKT`, `RDMT`, `SPMG`) и 13 корпусов.
+- [x] Добавлен модуль поиска аналогов (Cross-Reference Engine, `GET /api/inserts/{id}/equivalents`).
+- [x] Добавлен расчёт шероховатости поверхности ($R_a \approx \frac{f_n^2}{32 \cdot r_\varepsilon}$) и прогиба расточных оправок по балочной модели ($L/D$).
 
 ## Этап 3. Инженерный интерфейс нового поколения (React + 3D)
 - [ ] Перенос GUI на React + TypeScript + Tailwind + shadcn/ui с сохранением офлайн-движка.

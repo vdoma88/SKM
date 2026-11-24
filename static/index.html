@@ -321,6 +321,27 @@
         <label><span id="diamLabel">Диаметр обработки D</span> <span class="val" id="diamVal">50 мм</span></label>
         <input type="range" id="diamSlider" min="16" max="200" step="2" value="50" oninput="onSliderChange()" />
       </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:14px 0;">
+
+      <div class="field">
+        <label>Вылет оправки / инструмента L <span class="val" id="overhangVal">60 мм</span></label>
+        <input type="range" id="overhangSlider" min="20" max="200" step="5" value="60" oninput="onSliderChange()" />
+      </div>
+
+      <div class="field">
+        <label>Диаметр оправки / хвостовика D<sub>ш</sub> <span class="val" id="shankVal">20 мм</span></label>
+        <input type="range" id="shankSlider" min="10" max="50" step="2" value="20" oninput="onSliderChange()" />
+      </div>
+
+      <div class="field">
+        <label>Материал оправки</label>
+        <select id="shankMatSelect" onchange="runSelection()">
+          <option value="STEEL">Сталь (E=210 ГПа · L/D ≤ 4)</option>
+          <option value="CARBIDE">Твёрдый сплав (E=580 ГПа · L/D ≤ 6.5)</option>
+          <option value="DAMPED">Антивибрационная (L/D ≤ 10)</option>
+        </select>
+      </div>
     </aside>
 
     <div class="right-col">
@@ -350,6 +371,8 @@
             <div class="kpi"><div class="k-label">Сила резания F<sub>c</sub></div><div class="k-val" id="kFc">—</div><div class="k-sub" id="kKc">kc: — МПа</div></div>
             <div class="kpi"><div class="k-label">Съём металла (MRR)</div><div class="k-val" id="kMrr">—</div><div class="k-sub">см³/мин</div></div>
             <div class="kpi"><div class="k-label">Толщина стружки h<sub>m</sub></div><div class="k-val" id="kHm">—</div><div class="k-sub" id="kThin">утонение: 1.0x</div></div>
+            <div class="kpi"><div class="k-label">Шероховатость R<sub>a</sub></div><div class="k-val" id="kRa">—</div><div class="k-sub" id="kRaSub">теоретическая</div></div>
+            <div class="kpi"><div class="k-label">Прогиб оправки δ</div><div class="k-val" id="kDefl">—</div><div class="k-sub" id="kLd">L/D: —</div></div>
           </div>
 
           <div class="load-bar">
@@ -547,6 +570,25 @@ function calcKienzleClient(inp) {
   }
   const pMot = pNet / 0.80;
   const trq = (9550 * pMot) / Math.max(rpm, 1);
+
+  let raUm = null;
+  if (inp.operation_domain === "TURNING" && inp.corner_radius_mm && inp.corner_radius_mm > 0) {
+    raUm = ((inp.feed_mm * inp.feed_mm) / (32 * inp.corner_radius_mm)) * 1000 * (inp.has_wiper_geometry ? 0.5 : 1.0);
+    raUm = +raUm.toFixed(2);
+  }
+  let ldRatio = null, deflMm = null;
+  if (inp.overhang_mm && inp.shank_diameter_mm) {
+    ldRatio = +(inp.overhang_mm / inp.shank_diameter_mm).toFixed(2);
+    const eMap = { STEEL: 210000, CARBIDE: 580000, DAMPED: 210000 };
+    const ldMap = { STEEL: 4.0, CARBIDE: 6.5, DAMPED: 10.0 };
+    const mat = inp.shank_material || "STEEL";
+    const I = (Math.PI * Math.pow(inp.shank_diameter_mm, 4)) / 64;
+    const fRad = fc * (inp.operation_domain === "DRILLING" ? 0.15 : 0.35);
+    deflMm = +((fRad * Math.pow(inp.overhang_mm, 3)) / (3 * eMap[mat] * I)).toFixed(4);
+    if (ldRatio > ldMap[mat]) warnings.push(`Высокий вылет L/D=${ldRatio} для оправки ${mat} (рекомендовано ≤ ${ldMap[mat]}) — риск вибраций.`);
+    if (deflMm > 0.05) warnings.push(`Расчётный прогиб оправки δ=${deflMm.toFixed(3)} мм > 0.05 мм — уменьшите вылет или смените оправку.`);
+  }
+
   if (inp.machine_max_power_kw && pMot > inp.machine_max_power_kw)
     warnings.push(`Мощность (${pMot.toFixed(2)} кВт) превышает предел станка (${inp.machine_max_power_kw} кВт).`);
   if (inp.machine_max_torque_nm && trq > inp.machine_max_torque_nm)
@@ -561,7 +603,7 @@ function calcKienzleClient(inp) {
     rpm:+rpmRaw.toFixed(1), rpm_clamped:+rpm.toFixed(1), vf_mm_min:+vf.toFixed(1),
     hm_mm:+hm.toFixed(4), kc_mpa:+kc.toFixed(1), fc_n:+fc.toFixed(1),
     mrr_cm3_min:+mrr.toFixed(2), power_net_kw:+pNet.toFixed(2), power_motor_kw:+pMot.toFixed(2),
-    torque_nm:+trq.toFixed(1), chip_thinning_factor:thin, in_chipbreaker_zone:inZone, warnings
+    torque_nm:+trq.toFixed(1), chip_thinning_factor:thin, ra_um:raUm, ld_ratio:ldRatio, deflection_mm:deflMm, in_chipbreaker_zone:inZone, warnings
   };
 }
 
@@ -639,6 +681,8 @@ function updateSliderLabels() {
   document.getElementById("feedVal").textContent = fmtLen(parseFloat(document.getElementById("feedSlider").value));
   document.getElementById("aeVal").textContent = fmtLen(parseFloat(document.getElementById("aeSlider").value));
   document.getElementById("diamVal").textContent = fmtLen(parseFloat(document.getElementById("diamSlider").value));
+  document.getElementById("overhangVal").textContent = fmtLen(parseFloat(document.getElementById("overhangSlider").value));
+  document.getElementById("shankVal").textContent = fmtLen(parseFloat(document.getElementById("shankSlider").value));
 }
 
 function onSliderChange() { updateSliderLabels(); runSelection(); }
@@ -654,7 +698,10 @@ async function runSelection() {
     ae_mm: parseFloat(document.getElementById("aeSlider").value),
     diameter_mm: parseFloat(document.getElementById("diamSlider").value),
     machine_id: document.getElementById("machineSelect").value,
-    pocket_filter: state.pocketFilter
+    pocket_filter: state.pocketFilter,
+    overhang_mm: parseFloat(document.getElementById("overhangSlider").value),
+    shank_diameter_mm: parseFloat(document.getElementById("shankSlider").value),
+    shank_material: document.getElementById("shankMatSelect").value
   };
 
   let results = [];
@@ -697,6 +744,9 @@ function runSelectionClient(req) {
       vc_m_min: vc, feed_mm: req.feed_mm, ap_mm: req.ap_mm, ae_mm: req.ae_mm,
       diameter_mm: req.operation_domain === "TURNING" ? req.diameter_mm : (h0.dc_mm || req.diameter_mm),
       teeth_count: h0.z || 1, lead_angle_deg: h0.lead_angle_deg || 90,
+      corner_radius_mm: (parseIsoClient(ins.iso_code).corner_radius_mm || 0.8),
+      has_wiper_geometry: !!ins.has_wiper_geometry,
+      overhang_mm: req.overhang_mm, shank_diameter_mm: req.shank_diameter_mm, shank_material: req.shank_material,
       machine_max_rpm: m.max_rpm, machine_max_power_kw: m.spindle_power_kw, machine_max_torque_nm: m.max_torque_nm,
       chipbreaker_polygon: ins.operating_zone_polygon
     });
@@ -816,6 +866,10 @@ async function renderSelectedDetails() {
   document.getElementById("kMrr").textContent = p.mrr_cm3_min;
   document.getElementById("kHm").textContent = `${p.hm_mm} мм`;
   document.getElementById("kThin").textContent = p.chip_thinning_factor > 1 ? `утонение: ${p.chip_thinning_factor}x!` : "утонение: 1.0x";
+  document.getElementById("kRa").textContent = p.ra_um !== null && p.ra_um !== undefined ? `${p.ra_um} мкм` : "—";
+  document.getElementById("kRaSub").textContent = p.ra_um !== null && p.ra_um !== undefined ? (c.has_wiper_geometry ? "Wiper (x0.5)" : "f² / (32·RE)") : "только точение";
+  document.getElementById("kDefl").textContent = p.deflection_mm !== null && p.deflection_mm !== undefined ? `${p.deflection_mm.toFixed(3)} мм` : "—";
+  document.getElementById("kLd").textContent = p.ld_ratio ? `L/D = ${p.ld_ratio}` : "L/D: —";
 
   setBar("barPower", "lblPower", p.power_motor_kw, m.spindle_power_kw, "кВт");
   setBar("barTorque", "lblTorque", p.torque_nm, m.max_torque_nm, "Н·м");

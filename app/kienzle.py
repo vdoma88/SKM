@@ -1,12 +1,25 @@
 """
-Kienzle Cutting Physics Engine & Chipbreaker Polygon Containment Checker.
+Kienzle Cutting Physics Engine, Surface Roughness (Ra), Beam Deflection (L/D),
+and Chipbreaker Polygon Containment Checker.
 Supports Turning, Milling (with radial chip thinning), and Axial Indexable Drilling.
-All internal units are strictly SI / Metric (mm, m/min, MPa, N, kW, Nm, cm3/min).
+All internal units are strictly SI / Metric (mm, m/min, MPa, N, kW, Nm, cm3/min, um).
 """
 
 import math
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
+
+SHANK_ELASTIC_MODULUS_MPA = {
+    "STEEL": 210_000.0,
+    "CARBIDE": 580_000.0,
+    "DAMPED": 210_000.0,
+}
+
+SHANK_SAFE_LD_LIMIT = {
+    "STEEL": 4.0,
+    "CARBIDE": 6.5,
+    "DAMPED": 10.0,
+}
 
 
 class CuttingCalcInput(BaseModel):
@@ -21,6 +34,12 @@ class CuttingCalcInput(BaseModel):
     teeth_count: int = Field(1, ge=1)         # z (milling)
     lead_angle_deg: float = Field(90.0, gt=0, le=95)
     efficiency: float = Field(0.80, gt=0.1, le=1.0)
+    # Surface roughness & overhang / boring-bar deflection parameters
+    corner_radius_mm: Optional[float] = Field(None, ge=0)
+    has_wiper_geometry: bool = False
+    overhang_mm: Optional[float] = Field(None, gt=0)
+    shank_diameter_mm: Optional[float] = Field(None, gt=0)
+    shank_material: Literal["STEEL", "CARBIDE", "DAMPED"] = "STEEL"
     # Optional machine limits
     machine_max_rpm: Optional[int] = None
     machine_max_power_kw: Optional[float] = None
@@ -41,6 +60,9 @@ class CuttingCalcResult(BaseModel):
     power_motor_kw: float
     torque_nm: float
     chip_thinning_factor: float
+    ra_um: Optional[float] = None
+    ld_ratio: Optional[float] = None
+    deflection_mm: Optional[float] = None
     in_chipbreaker_zone: Optional[bool] = None
     warnings: List[str] = []
 
@@ -130,7 +152,40 @@ def calculate_kienzle(inp: CuttingCalcInput) -> CuttingCalcResult:
     power_motor = power_net / inp.efficiency
     torque_nm = (9550.0 * power_motor) / max(rpm_clamped, 1.0)
 
-    # 3. Machine limits check
+    # 3. Theoretical Surface Roughness Ra (um) for Turning: Ra ~= fn^2 / (32 * RE) * 1000
+    ra_um: Optional[float] = None
+    if inp.operation_domain == "TURNING" and inp.corner_radius_mm and inp.corner_radius_mm > 0:
+        ra_raw = ((inp.feed_mm ** 2) / (32.0 * inp.corner_radius_mm)) * 1000.0
+        if inp.has_wiper_geometry:
+            ra_raw *= 0.5
+        ra_um = round(ra_raw, 2)
+
+    # 4. Cantilever Beam Deflection & Overhang L/D Check
+    ld_ratio: Optional[float] = None
+    deflection_mm: Optional[float] = None
+    if inp.overhang_mm and inp.shank_diameter_mm:
+        ld_ratio = round(inp.overhang_mm / inp.shank_diameter_mm, 2)
+        safe_ld = SHANK_SAFE_LD_LIMIT[inp.shank_material]
+        e_mpa = SHANK_ELASTIC_MODULUS_MPA[inp.shank_material]
+        # Second moment of area for circular shank I = pi * D^4 / 64 (mm^4)
+        inertia_mm4 = (math.pi * (inp.shank_diameter_mm ** 4)) / 64.0
+        # Radial/bending force fraction Fr (~0.35 * Fc for turning/milling, ~0.15 * Fc for balanced drilling)
+        bending_factor = 0.15 if inp.operation_domain == "DRILLING" else 0.35
+        f_radial_n = fc * bending_factor
+        # Cantilever deflection delta = (F * L^3) / (3 * E * I)
+        deflection = (f_radial_n * (inp.overhang_mm ** 3)) / (3.0 * e_mpa * inertia_mm4)
+        deflection_mm = round(deflection, 4)
+
+        if ld_ratio > safe_ld:
+            warnings.append(
+                f"Высокий вылет L/D={ld_ratio:.1f} для оправки {inp.shank_material} (рекомендовано ≤ {safe_ld:.1f}) — риск вибраций."
+            )
+        if deflection_mm > 0.05:
+            warnings.append(
+                f"Расчётный прогиб оправки δ={deflection_mm:.3f} мм превышает 0.05 мм — уменьшите вылет, ap или перейдите на твёрдосплавную оправку."
+            )
+
+    # 5. Machine limits check
     if inp.machine_max_power_kw and power_motor > inp.machine_max_power_kw:
         warnings.append(
             f"Требуемая мощность ({power_motor:.2f} кВт) превышает мощность станка ({inp.machine_max_power_kw:.1f} кВт)."
@@ -145,7 +200,7 @@ def calculate_kienzle(inp: CuttingCalcInput) -> CuttingCalcResult:
             f"Крутящий момент ({torque_nm:.1f} Н·м) превышает лимит станка ({inp.machine_max_torque_nm:.1f} Н·м)."
         )
 
-    # 4. Chipbreaker operating zone check
+    # 6. Chipbreaker operating zone check
     in_zone: Optional[bool] = None
     if inp.chipbreaker_polygon and len(inp.chipbreaker_polygon) >= 3 and inp.operation_domain != "DRILLING":
         in_zone = point_in_polygon(inp.feed_mm, inp.ap_mm, inp.chipbreaker_polygon)
@@ -166,6 +221,9 @@ def calculate_kienzle(inp: CuttingCalcInput) -> CuttingCalcResult:
         power_motor_kw=round(power_motor, 2),
         torque_nm=round(torque_nm, 1),
         chip_thinning_factor=chip_thinning_factor,
+        ra_um=ra_um,
+        ld_ratio=ld_ratio,
+        deflection_mm=deflection_mm,
         in_chipbreaker_zone=in_zone,
         warnings=warnings,
     )

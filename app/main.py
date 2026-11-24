@@ -41,6 +41,9 @@ class SelectionRequest(BaseModel):
     diameter_mm: float = Field(50.0, gt=0)
     machine_id: Optional[str] = "m1"
     pocket_filter: Optional[str] = None
+    overhang_mm: Optional[float] = Field(None, gt=0)
+    shank_diameter_mm: Optional[float] = Field(None, gt=0)
+    shank_material: Literal["STEEL", "CARBIDE", "DAMPED"] = "STEEL"
 
 
 class CrossRefItem(BaseModel):
@@ -149,6 +152,11 @@ def api_select(req: SelectionRequest):
                 diameter_mm=dc if req.operation_domain != "TURNING" else req.diameter_mm,
                 teeth_count=teeth,
                 lead_angle_deg=lead_angle,
+                corner_radius_mm=ins["corner_radius_mm"],
+                has_wiper_geometry=ins["has_wiper_geometry"],
+                overhang_mm=req.overhang_mm,
+                shank_diameter_mm=req.shank_diameter_mm,
+                shank_material=req.shank_material,
                 machine_max_rpm=machine["max_rpm"] if machine else None,
                 machine_max_power_kw=machine["spindle_power_kw"] if machine else None,
                 machine_max_torque_nm=machine["max_torque_nm"] if machine else None,

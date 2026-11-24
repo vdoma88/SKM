@@ -198,9 +198,56 @@ def test_repository_postgres_mock_driver():
         repo_mod.psycopg, repo_mod.dict_row = orig_pg, orig_dr
 
 
+def test_surface_roughness_and_beam_deflection():
+    # Standard turning Ra: fn=0.20, RE=0.8 -> 0.04 / 25.6 * 1000 = 1.56 um
+    res_std = calculate_kienzle(
+        CuttingCalcInput(
+            operation_domain="TURNING",
+            kc1_1_mpa=1500.0,
+            mc_exponent=0.25,
+            vc_m_min=240.0,
+            feed_mm=0.20,
+            ap_mm=2.0,
+            diameter_mm=50.0,
+            corner_radius_mm=0.8,
+            has_wiper_geometry=False,
+            overhang_mm=100.0,
+            shank_diameter_mm=20.0,
+            shank_material="STEEL",
+        )
+    )
+    assert res_std.ra_um == 1.56
+    assert res_std.ld_ratio == 5.0
+    assert res_std.deflection_mm is not None and res_std.deflection_mm > 0.05
+    assert any("L/D=5.0" in w for w in res_std.warnings)
+    assert any("прогиб оправки" in w for w in res_std.warnings)
+
+    # Wiper geometry halves theoretical Ra; Carbide shank cuts deflection >2.7x
+    res_carbide = calculate_kienzle(
+        CuttingCalcInput(
+            operation_domain="TURNING",
+            kc1_1_mpa=1500.0,
+            mc_exponent=0.25,
+            vc_m_min=240.0,
+            feed_mm=0.20,
+            ap_mm=2.0,
+            diameter_mm=50.0,
+            corner_radius_mm=0.8,
+            has_wiper_geometry=True,
+            overhang_mm=100.0,
+            shank_diameter_mm=20.0,
+            shank_material="CARBIDE",
+        )
+    )
+    assert res_carbide.ra_um == 0.78
+    assert res_carbide.deflection_mm < res_std.deflection_mm * 0.4
+    assert not any("L/D=5.0" in w for w in res_carbide.warnings)
+
+
 if __name__ == "__main__":
     test_iso1832_pg_rounding_and_expanded_codes()
     test_kienzle_turning_and_milling()
     test_repository_memory_seed_and_cross_references()
     test_repository_postgres_mock_driver()
+    test_surface_roughness_and_beam_deflection()
     print("ALL EXPANDED SKM TESTS PASSED!")
