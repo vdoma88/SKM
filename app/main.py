@@ -11,13 +11,13 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.iso1832 import parse_iso1832, ISO1832Parsed
-from app.kienzle import calculate_kienzle, CuttingCalcInput, CuttingCalcResult, point_in_polygon
+from app.kienzle import calculate_kienzle, CuttingCalcInput, CuttingCalcResult
 from app.repository import ToolingRepository
 
 app = FastAPI(
     title="ISO Tooling Selector API",
-    version="0.1.0",
-    description="Vendor-agnostic indexable insert selector with ISO 1832 parser and Kienzle physics engine.",
+    version="0.2.0",
+    description="Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics engine, and PostgreSQL/psycopg3 backend.",
 )
 
 app.add_middleware(
@@ -41,6 +41,16 @@ class SelectionRequest(BaseModel):
     diameter_mm: float = Field(50.0, gt=0)
     machine_id: Optional[str] = "m1"
     pocket_filter: Optional[str] = None
+
+
+class CrossRefItem(BaseModel):
+    target_insert_id: str
+    target_iso_code: str
+    target_grade_code: str
+    target_seat_pocket_signature: str
+    match_type: str
+    confidence_score: float
+    notes: str
 
 
 class CandidateResult(BaseModel):
@@ -87,6 +97,11 @@ def api_parse_iso1832(code: str = Query(..., description="ISO 1832 code, e.g. CN
     return parse_iso1832(code)
 
 
+@app.get("/api/inserts/{insert_id}/equivalents", response_model=List[CrossRefItem])
+def api_equivalents(insert_id: str):
+    return repo.get_cross_references(insert_id)
+
+
 @app.post("/api/calculate", response_model=CuttingCalcResult)
 def api_calculate(payload: CuttingCalcInput):
     return calculate_kienzle(payload)
@@ -102,7 +117,6 @@ def api_select(req: SelectionRequest):
     machine = repo.get_machine(req.machine_id) if req.machine_id else None
     inserts = repo.list_inserts(req.operation_domain)
 
-    # Stability Vc derating factor
     vc_factor = {"STABLE": 1.0, "INTERRUPTED": 0.80, "UNSTABLE": 0.85}[req.stability]
 
     results: List[CandidateResult] = []
@@ -115,10 +129,9 @@ def api_select(req: SelectionRequest):
 
         rec = ins["recommendations"].get(req.material_subgroup)
         if not rec:
-            # Fallback to first available recommendation if subgroup not explicitly listed
             rec = next(iter(ins["recommendations"].values()))
 
-        vc_target = round(rec["vc"] * vc_factor, 1)
+        vc_target = round(float(rec["vc"]) * vc_factor, 1)
         holder0 = ins["holders"][0] if ins["holders"] else {}
         dc = holder0.get("dc_mm") or req.diameter_mm
         teeth = holder0.get("z") or 1
@@ -143,7 +156,6 @@ def api_select(req: SelectionRequest):
             )
         )
 
-        # Scoring algorithm (0..100)
         score = 60 if rank == "PRIMARY" else 40
         if physics.in_chipbreaker_zone is True or req.operation_domain == "DRILLING":
             score += 20
@@ -157,7 +169,7 @@ def api_select(req: SelectionRequest):
             score -= min(len(physics.warnings) * 8, 24)
         score = max(10, min(100, score))
 
-        cost_per_edge = round(ins["relative_cost_index"] / max(ins["cutting_edges_count"], 1), 3)
+        cost_per_edge = round(float(ins["relative_cost_index"]) / max(ins["cutting_edges_count"], 1), 3)
 
         results.append(
             CandidateResult(

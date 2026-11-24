@@ -1,10 +1,12 @@
 """
 ISO 1832 Indexable Insert Code Parser & Pocket Signature Generator.
 Supports Turning, Milling, and Axial Drilling standard ISO codes
-(e.g. CNMG 120408, CCMT 09T304, APKT 160408, WCMX 050308, WNMG 080408).
+(e.g. CNMG 120408, CNGA 120408, WNMG 080408, DNMG 150608, VNMG 160404,
+CCMT 09T304, DCMT 11T304, APKT 160408, SEKT 120408, RDMT 120400, WCMX 050308, SPMG 090408).
 """
 
 import re
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 
@@ -15,7 +17,7 @@ SHAPES: Dict[str, Dict[str, Any]] = {
     "T": {"name": "Треугольник 60°", "angle_deg": 60, "edges_single": 3, "ic_factor": 0.577},
     "V": {"name": "Ромб 35°", "angle_deg": 35, "edges_single": 2, "ic_factor": 0.574},
     "W": {"name": "Тригон 80°", "angle_deg": 80, "edges_single": 3, "ic_factor": 1.464},
-    "R": {"name": "Круг", "angle_deg": 360, "edges_single": 1, "ic_factor": 1.000},
+    "R": {"name": "Круг", "angle_deg": 360, "edges_single": 6, "ic_factor": 1.000},
     "A": {"name": "Параллелограмм 85°", "angle_deg": 85, "edges_single": 2, "ic_factor": 0.577},
     "P": {"name": "Пятиугольник 108°", "angle_deg": 108, "edges_single": 5, "ic_factor": 1.376},
     "H": {"name": "Шестиугольник 120°", "angle_deg": 120, "edges_single": 6, "ic_factor": 1.732},
@@ -49,7 +51,7 @@ FIXING_TYPES: Dict[str, Dict[str, Any]] = {
     "M": {"desc": "Цилиндрическое отверстие, односторонний стружколом", "double_sided": False},
     "T": {"desc": "Отверстие с зенковкой 40–60°, односторонний стружколом (винт)", "double_sided": False},
     "W": {"desc": "Отверстие с зенковкой 40–60°, без стружколома", "double_sided": False},
-    "A": {"desc": "Цилиндрическое отверстие, без стружколома", "double_sided": False},
+    "A": {"desc": "Цилиндрическое отверстие, без стружколома (CBN/керамика)", "double_sided": True},
     "N": {"desc": "Без отверстия, без стружколома (прихват сверху)", "double_sided": True},
     "X": {"desc": "Специальное исполнение (сверлильная/фрезерная геометрия)", "double_sided": False},
 }
@@ -58,7 +60,7 @@ FIXING_TYPES: Dict[str, Dict[str, Any]] = {
 STANDARD_IC_MM: Dict[tuple, float] = {
     ("C", "06"): 6.350, ("C", "09"): 9.525, ("C", "12"): 12.700, ("C", "16"): 15.875, ("C", "19"): 19.050,
     ("D", "07"): 6.350, ("D", "11"): 9.525, ("D", "15"): 12.700,
-    ("S", "09"): 9.525, ("S", "12"): 12.700, ("S", "15"): 15.875, ("S", "19"): 19.050,
+    ("S", "07"): 7.938, ("S", "09"): 9.525, ("S", "12"): 12.700, ("S", "15"): 15.875, ("S", "19"): 19.050,
     ("T", "11"): 6.350, ("T", "16"): 9.525, ("T", "22"): 12.700,
     ("V", "11"): 6.350, ("V", "16"): 9.525,
     ("W", "05"): 7.938, ("W", "06"): 9.525, ("W", "08"): 12.700,
@@ -76,8 +78,13 @@ THICKNESS_MM: Dict[str, float] = {
 RADIUS_MM: Dict[str, float] = {
     "00": 0.0, "02": 0.2, "04": 0.4, "08": 0.8, "12": 1.2,
     "16": 1.6, "20": 2.0, "24": 2.4, "32": 3.2,
-    "M0": 0.0,  # Round insert / special
+    "M0": 0.0,
 }
+
+
+def _round_half_up_x100(value: float) -> int:
+    """Matches PostgreSQL ROUND(val * 100)::TEXT (half away from zero)."""
+    return int((Decimal(str(value)) * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 class ISO1832Segment(BaseModel):
@@ -113,7 +120,6 @@ class ISO1832Parsed(BaseModel):
 def parse_iso1832(code: str) -> ISO1832Parsed:
     raw = (code or "").strip()
     cleaned = re.sub(r"[^A-Za-z0-9\-]", "", raw).upper()
-    # Split optional chipbreaker/manufacturer suffix after hyphen
     parts = cleaned.split("-", 1)
     core = parts[0]
     suffix = parts[1] if len(parts) > 1 and parts[1] else None
@@ -160,7 +166,9 @@ def parse_iso1832(code: str) -> ISO1832Parsed:
     ic_mm = STANDARD_IC_MM.get((s1_shape, s5_len), round(edge_len_mm * shape_info["ic_factor"], 3))
     thickness_mm = THICKNESS_MM[s6_thk]
 
-    if s7_rad in RADIUS_MM:
+    if s1_shape == "R" and s7_rad in ("00", "M0"):
+        radius_mm = round(ic_mm / 2.0, 2)
+    elif s7_rad in RADIUS_MM:
         radius_mm = RADIUS_MM[s7_rad]
     else:
         try:
@@ -171,7 +179,12 @@ def parse_iso1832(code: str) -> ISO1832Parsed:
     is_double = (s2_clear == "N") and fix_info["double_sided"]
     edges = shape_info["edges_single"] * (2 if is_double else 1)
 
-    pocket_sig = f"{s1_shape}-{s2_clear}-{round(ic_mm * 100)}-{round(thickness_mm * 100)}-{s4_fix}"
+    pocket_sig = (
+        f"{s1_shape}-{s2_clear}-"
+        f"{_round_half_up_x100(ic_mm)}-"
+        f"{_round_half_up_x100(thickness_mm)}-"
+        f"{s4_fix}"
+    )
 
     segments = [
         ISO1832Segment(position=1, label="Форма", code=s1_shape, meaning=shape_info["name"], color="#38BDF8"),

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ISO Tooling Selector — Прототип GUI (ISO 1832 + Кинцле)</title>
+<title>ISO Tooling Selector — SKM (ISO 1832 + Кинцле + PostgreSQL)</title>
 <style>
   :root {
     --bg: #0b111a;
@@ -32,14 +32,8 @@
     min-height: 100vh;
   }
   header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 14px 22px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 14px 22px; background: var(--panel); border-bottom: 1px solid var(--border);
   }
   .brand { display: flex; align-items: center; gap: 10px; }
   .brand-logo {
@@ -68,22 +62,15 @@
   .unit-toggle button.active { background: var(--accent); color: #06131f; }
 
   .container { max-width: 1440px; margin: 0 auto; padding: 18px; display: flex; flex-direction: column; gap: 16px; }
-
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-  }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
   .card-title {
     font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
     color: var(--muted); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;
   }
 
-  /* ISO 1832 Decoder Bar */
   .decoder-top { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
   .iso-input {
-    flex: 1; min-width: 220px; max-width: 340px;
+    flex: 1; min-width: 220px; max-width: 320px;
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
     color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 17px; font-weight: 700; letter-spacing: 1px; padding: 9px 14px; text-transform: uppercase;
@@ -92,8 +79,7 @@
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .chip {
     background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
-    padding: 5px 10px; border-radius: 6px; font-size: 12px; font-family: monospace; cursor: pointer;
-    transition: 0.15s;
+    padding: 5px 9px; border-radius: 6px; font-size: 11.5px; font-family: monospace; cursor: pointer; transition: 0.15s;
   }
   .chip:hover { border-color: var(--accent); color: var(--accent); }
   .decoder-body { display: grid; grid-template-columns: 110px 1fr; gap: 14px; align-items: center; }
@@ -123,14 +109,12 @@
   }
   .btn-sm.active, .btn-sm:hover { background: var(--accent); color: #06131f; }
 
-  /* Main 2-column workspace */
   .workspace { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
   @media (max-width: 980px) {
     .workspace { grid-template-columns: 1fr; }
     .decoder-body { grid-template-columns: 1fr; }
   }
 
-  /* Left Wizard */
   .field { margin-bottom: 14px; }
   .field label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
   .field label span.val { color: var(--text); font-family: monospace; font-weight: 700; }
@@ -160,24 +144,16 @@
   }
   .seg-btn.active { background: rgba(56, 189, 248, 0.16); border-color: var(--accent); color: var(--accent); }
 
-  /* Right panel: top chart + physics, bottom cards */
   .right-col { display: flex; flex-direction: column; gap: 16px; }
   .analytics-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 16px; }
   @media (max-width: 1180px) { .analytics-grid { grid-template-columns: 1fr; } }
 
-  /* Chipbreaker SVG Chart */
-  .chart-wrap {
-    background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px;
-    position: relative; user-select: none;
-  }
+  .chart-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px; user-select: none; }
   .chart-hint { font-size: 11px; color: var(--muted); margin-top: 6px; display: flex; justify-content: space-between; }
   svg.cb-chart { width: 100%; height: 245px; display: block; cursor: crosshair; }
 
-  /* Telemetry KPI Grid */
   .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
-  .kpi {
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
-  }
+  .kpi { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
   .kpi .k-label { font-size: 11px; color: var(--muted); }
   .kpi .k-val { font-size: 19px; font-weight: 800; font-family: monospace; margin-top: 2px; }
   .kpi .k-sub { font-size: 11px; color: var(--muted); }
@@ -193,11 +169,18 @@
     margin-top: 10px; padding: 9px 11px; border-radius: 8px; font-size: 12px;
     background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.45); color: #fcd34d;
   }
-  .warnings-box.ok {
-    background: rgba(34, 197, 94, 0.10); border-color: rgba(34, 197, 94, 0.4); color: #86efac;
-  }
+  .warnings-box.ok { background: rgba(34, 197, 94, 0.10); border-color: rgba(34, 197, 94, 0.4); color: #86efac; }
 
-  /* Candidates */
+  .xref-box {
+    margin-top: 10px; padding: 10px 12px; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--border); font-size: 12px;
+  }
+  .xref-item {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+    padding: 6px 0; border-bottom: 1px dashed var(--border);
+  }
+  .xref-item:last-child { border-bottom: none; padding-bottom: 0; }
+
   .candidates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
   .cand-card {
     background: var(--panel-2); border: 2px solid var(--border); border-radius: 10px;
@@ -229,7 +212,7 @@
 
 <header>
   <div class="brand">
-    <div class="brand-logo">ISO</div>
+    <div class="brand-logo">SKM</div>
     <div>
       <h1>ISO Tooling Selector</h1>
       <small>Бренд-нейтральный подбор СМП · ISO 13399 / ISO 1832 / ISO 513 + Физика Кинцле</small>
@@ -245,21 +228,23 @@
 </header>
 
 <div class="container">
-  <!-- 1. Visual ISO 1832 Decoder -->
   <section class="card">
     <div class="card-title">
       <span>Визуальный ISO 1832 декодер пластины</span>
       <span style="font-weight:500;text-transform:none;">Введите код или выберите пресет</span>
     </div>
     <div class="decoder-top">
-      <input id="isoInput" class="iso-input" value="CNMG 120408" placeholder="Например: CNMG 120408" oninput="handleIsoInput()" />
+      <input id="isoInput" class="iso-input" value="CNMG 120408" placeholder="Например: WNMG 080408" oninput="handleIsoInput()" />
       <div class="chips">
         <button class="chip" onclick="setIso('CNMG 120408')">CNMG 120408</button>
-        <button class="chip" onclick="setIso('CNMG 120404')">CNMG 120404</button>
-        <button class="chip" onclick="setIso('CCMT 09T304')">CCMT 09T304</button>
-        <button class="chip" onclick="setIso('APKT 160408')">APKT 160408</button>
-        <button class="chip" onclick="setIso('WCMX 050308')">WCMX 050308</button>
         <button class="chip" onclick="setIso('WNMG 080408')">WNMG 080408</button>
+        <button class="chip" onclick="setIso('DNMG 150608')">DNMG 150608</button>
+        <button class="chip" onclick="setIso('VNMG 160404')">VNMG 160404</button>
+        <button class="chip" onclick="setIso('CNGA 120408')">CNGA 120408</button>
+        <button class="chip" onclick="setIso('APKT 160408')">APKT 160408</button>
+        <button class="chip" onclick="setIso('SEKT 120408')">SEKT 120408</button>
+        <button class="chip" onclick="setIso('RDMT 120400')">RDMT 120400</button>
+        <button class="chip" onclick="setIso('SPMG 090408')">SPMG 090408</button>
       </div>
     </div>
     <div class="decoder-body">
@@ -271,9 +256,7 @@
     </div>
   </section>
 
-  <!-- 2. Main Workspace -->
   <div class="workspace">
-    <!-- Left: Task Wizard & Sliders -->
     <aside class="card">
       <div class="card-title"><span>Параметры задачи и станка</span></div>
 
@@ -321,17 +304,17 @@
 
       <div class="field" id="apField">
         <label>Глубина резания a<sub>p</sub> <span class="val" id="apVal">2.00 мм</span></label>
-        <input type="range" id="apSlider" min="0.2" max="10.0" step="0.1" value="2.0" oninput="onSliderChange()" />
+        <input type="range" id="apSlider" min="0.1" max="10.0" step="0.1" value="2.0" oninput="onSliderChange()" />
       </div>
 
       <div class="field">
         <label><span id="feedLabel">Подача на оборот f<sub>n</sub></span> <span class="val" id="feedVal">0.25 мм</span></label>
-        <input type="range" id="feedSlider" min="0.05" max="0.50" step="0.01" value="0.25" oninput="onSliderChange()" />
+        <input type="range" id="feedSlider" min="0.05" max="0.60" step="0.01" value="0.25" oninput="onSliderChange()" />
       </div>
 
       <div class="field" id="aeField" style="display:none;">
         <label>Ширина фрезерования a<sub>e</sub> <span class="val" id="aeVal">25.0 мм</span></label>
-        <input type="range" id="aeSlider" min="2" max="50" step="1" value="25" oninput="onSliderChange()" />
+        <input type="range" id="aeSlider" min="2" max="80" step="1" value="25" oninput="onSliderChange()" />
       </div>
 
       <div class="field">
@@ -340,10 +323,8 @@
       </div>
     </aside>
 
-    <!-- Right: Analytics + Candidates -->
     <div class="right-col">
       <div class="analytics-grid">
-        <!-- Interactive Chipbreaker 2D Map -->
         <section class="card">
           <div class="card-title">
             <span>Интерактивная карта стружколома (a<sub>p</sub> / f)</span>
@@ -356,9 +337,9 @@
             <span>Кликните по графику, чтобы сместить режимы (f, a<sub>p</sub>)</span>
             <span id="cbStatus">—</span>
           </div>
+          <div id="xrefContainer" style="display:none;" class="xref-box"></div>
         </section>
 
-        <!-- Kienzle Physics Panel -->
         <section class="card">
           <div class="card-title">
             <span>Физика резания (Кинцле) и лимиты станка</span>
@@ -388,7 +369,6 @@
         </section>
       </div>
 
-      <!-- Candidate Cards -->
       <section class="card">
         <div class="card-title">
           <span>Рекомендованные пластины и совместимые корпуса</span>
@@ -401,87 +381,7 @@
 </div>
 
 <script>
-// ============================================================================
-// Built-in Seed & Physics Fallback (runs seamlessly offline OR via FastAPI)
-// ============================================================================
-const FALLBACK_DB = {
-  subgroups: [
-    {code:"P1", iso_group:"P", name_ru:"Нелегированные стали (Ст20, Ст45, S355)", kc1_1_mpa:1500, mc_exponent:0.25},
-    {code:"P2", iso_group:"P", name_ru:"Низколегированные стали (40Х, 30ХГСА, 42CrMo4)", kc1_1_mpa:1700, mc_exponent:0.25},
-    {code:"M1", iso_group:"M", name_ru:"Аустенитные нерж. (12Х18Н10Т, AISI 304/316L)", kc1_1_mpa:1800, mc_exponent:0.21},
-    {code:"K1", iso_group:"K", name_ru:"Серый чугун (СЧ20, СЧ25, GG25)", kc1_1_mpa:1150, mc_exponent:0.28},
-    {code:"N1", iso_group:"N", name_ru:"Алюминиевые сплавы (Д16Т, АМг6, 6061-T6)", kc1_1_mpa:450, mc_exponent:0.25},
-    {code:"S2", iso_group:"S", name_ru:"Титановые сплавы (ВТ6, Ti-6Al-4V)", kc1_1_mpa:1450, mc_exponent:0.23},
-    {code:"H1", iso_group:"H", name_ru:"Закалённые стали 48–58 HRC (Х12МФ, D2)", kc1_1_mpa:3200, mc_exponent:0.30}
-  ],
-  machines: [
-    {id:"m1", name:"Токарно-фрезерный центр (BMT55 · 18.5 кВт · 4500 об/мин)", max_rpm:4500, spindle_power_kw:18.5, max_torque_nm:320},
-    {id:"m2", name:"Вертикальный фрезерный ОЦ (BT40 · 15 кВт · 12000 об/мин)", max_rpm:12000, spindle_power_kw:15.0, max_torque_nm:95},
-    {id:"m3", name:"Универсальный токарный ЧПУ (7.5 кВт · 3000 об/мин)", max_rpm:3000, spindle_power_kw:7.5, max_torque_nm:160}
-  ],
-  inserts: [
-    {
-      insert_id:"ins-1", iso_code:"CNMG 120408", operation_domain:"TURNING",
-      grade_code:"GEN-P25-CVD", coating_method:"CVD", coating_composition:"TiCN-Al2O3-TiN",
-      chipbreaker_code:"GEN-PM", application_class:"MEDIUM", edge_prep:"HONED",
-      toughness:6, wear:8, cutting_edges_count:4, relative_cost:1.0,
-      seat_pocket_signature:"C-N-1270-476-G", suitability:{P:"PRIMARY", K:"SECONDARY"},
-      operating_zone_polygon:[[0.15,1.0],[0.22,0.8],[0.45,1.2],[0.42,4.5],[0.20,4.0],[0.15,2.2]],
-      holders:[{code:"PCLNR 2525M 12", category:"Наружное точение", lead_angle_deg:95, clamping:"Рычаг"}],
-      recs:{P1:{vc:290,coolant:"Обильная СОЖ"}, P2:{vc:240,coolant:"Обильная СОЖ"}, K1:{vc:260,coolant:"Сухое резание"}}
-    },
-    {
-      insert_id:"ins-2", iso_code:"CNMG 120404", operation_domain:"TURNING",
-      grade_code:"GEN-M25-PVD", coating_method:"PVD", coating_composition:"AlTiN",
-      chipbreaker_code:"GEN-MF", application_class:"FINISHING", edge_prep:"SHARP",
-      toughness:8, wear:6, cutting_edges_count:4, relative_cost:1.15,
-      seat_pocket_signature:"C-N-1270-476-G", suitability:{M:"PRIMARY", S:"PRIMARY", P:"SECONDARY"},
-      operating_zone_polygon:[[0.08,0.3],[0.15,0.25],[0.25,0.4],[0.22,2.0],[0.10,1.6]],
-      holders:[{code:"PCLNR 2525M 12", category:"Наружное точение", lead_angle_deg:95, clamping:"Рычаг"}],
-      recs:{M1:{vc:165,coolant:"Обильная СОЖ"}, S2:{vc:55,coolant:"СОЖ ВД"}, P1:{vc:230,coolant:"Обильная СОЖ"}, P2:{vc:195,coolant:"Обильная СОЖ"}}
-    },
-    {
-      insert_id:"ins-3", iso_code:"CCMT 09T304", operation_domain:"TURNING",
-      grade_code:"GEN-M25-PVD", coating_method:"PVD", coating_composition:"AlTiN",
-      chipbreaker_code:"GEN-MF", application_class:"FINISHING", edge_prep:"SHARP",
-      toughness:8, wear:6, cutting_edges_count:2, relative_cost:0.90,
-      seat_pocket_signature:"C-C-953-397-T", suitability:{M:"PRIMARY", S:"PRIMARY", P:"SECONDARY"},
-      operating_zone_polygon:[[0.08,0.3],[0.15,0.25],[0.25,0.4],[0.22,2.0],[0.10,1.6]],
-      holders:[{code:"S20R-SCLCR 09", category:"Расточная оправка", lead_angle_deg:95, clamping:"Винт"}],
-      recs:{M1:{vc:155,coolant:"Внутр. СОЖ"}, P1:{vc:220,coolant:"Обильная СОЖ"}, S2:{vc:50,coolant:"СОЖ ВД"}}
-    },
-    {
-      insert_id:"ins-4", iso_code:"APKT 160408", operation_domain:"MILLING",
-      grade_code:"GEN-PM30-MILL", coating_method:"PVD", coating_composition:"TiAlSiN",
-      chipbreaker_code:"GEN-GM", application_class:"MEDIUM", edge_prep:"CHAMFERED_HONED",
-      toughness:8, wear:7, cutting_edges_count:2, relative_cost:1.20,
-      seat_pocket_signature:"A-P-953-476-T", suitability:{P:"PRIMARY", M:"PRIMARY", K:"SECONDARY"},
-      operating_zone_polygon:[[0.08,0.5],[0.22,0.8],[0.18,10.0],[0.08,8.0]],
-      holders:[{code:"SHM-AP16-D50-Z5", category:"Уступная фреза 90°", lead_angle_deg:90, dc_mm:50, z:5, clamping:"Винт"}],
-      recs:{P1:{vc:210,coolant:"Обдув воздухом"}, P2:{vc:185,coolant:"Обдув воздухом"}, M1:{vc:135,coolant:"СОЖ"}, K1:{vc:220,coolant:"Сухое"}}
-    },
-    {
-      insert_id:"ins-5", iso_code:"APKT 160408-AL", operation_domain:"MILLING",
-      grade_code:"GEN-N10-UNC", coating_method:"UNCOATED", coating_composition:"Polished Submicron",
-      chipbreaker_code:"GEN-AL", application_class:"ALUMINUM_SHARP", edge_prep:"SHARP",
-      toughness:7, wear:7, cutting_edges_count:2, relative_cost:1.25,
-      seat_pocket_signature:"A-P-953-476-T", suitability:{N:"PRIMARY"},
-      operating_zone_polygon:[[0.05,0.5],[0.25,1.0],[0.20,12.0],[0.05,10.0]],
-      holders:[{code:"SHM-AP16-D50-Z5", category:"Уступная фреза 90°", lead_angle_deg:90, dc_mm:50, z:5, clamping:"Винт"}],
-      recs:{N1:{vc:650,coolant:"Обильная СОЖ"}}
-    },
-    {
-      insert_id:"ins-6", iso_code:"WCMX 050308", operation_domain:"DRILLING",
-      grade_code:"GEN-DRL-CORE", coating_method:"PVD", coating_composition:"TiAlN",
-      chipbreaker_code:"GEN-DRL", application_class:"MEDIUM", edge_prep:"HONED",
-      toughness:9, wear:5, cutting_edges_count:3, relative_cost:1.10,
-      seat_pocket_signature:"W-C-794-318-X", suitability:{P:"PRIMARY", M:"PRIMARY"},
-      operating_zone_polygon:[],
-      holders:[{code:"UDRL-WCMX05-D26-3D", category:"Корпусное U-сверло 3D", lead_angle_deg:90, dc_mm:26, z:1, clamping:"Винт"}],
-      recs:{P1:{vc:160,coolant:"Внутр. СОЖ ≥15 бар"}, P2:{vc:135,coolant:"Внутр. СОЖ ≥15 бар"}, M1:{vc:110,coolant:"Внутр. СОЖ ≥15 бар"}}
-    }
-  ]
-};
+const FALLBACK_DB = {"subgroups": [{"code": "P1", "iso_group": "P", "name_ru": "Нелегированные стали (Ст20, Ст45, S355)", "kc1_1_mpa": 1500.0, "mc_exponent": 0.25, "hb": "125–190 HB"}, {"code": "P2", "iso_group": "P", "name_ru": "Низколегированные стали (40Х, 30ХГСА, 42CrMo4)", "kc1_1_mpa": 1700.0, "mc_exponent": 0.25, "hb": "180–275 HB"}, {"code": "P3", "iso_group": "P", "name_ru": "Высоколегированные и инструм. стали (Х12МФ, H13)", "kc1_1_mpa": 1950.0, "mc_exponent": 0.25, "hb": "250–330 HB"}, {"code": "M1", "iso_group": "M", "name_ru": "Аустенитные нерж. (12Х18Н10Т, AISI 304/316L)", "kc1_1_mpa": 1800.0, "mc_exponent": 0.21, "hb": "150–220 HB"}, {"code": "M2", "iso_group": "M", "name_ru": "Дуплексные нерж. (SAF 2205, 08Х22Н6Т)", "kc1_1_mpa": 2000.0, "mc_exponent": 0.21, "hb": "220–290 HB"}, {"code": "K1", "iso_group": "K", "name_ru": "Серый чугун (СЧ20, СЧ25, GG25)", "kc1_1_mpa": 1150.0, "mc_exponent": 0.28, "hb": "160–240 HB"}, {"code": "K2", "iso_group": "K", "name_ru": "Высокопрочный чугун ВЧ (ВЧ50, GGG50)", "kc1_1_mpa": 1350.0, "mc_exponent": 0.28, "hb": "180–270 HB"}, {"code": "N1", "iso_group": "N", "name_ru": "Алюминиевые сплавы (Д16Т, АМг6, 6061-T6)", "kc1_1_mpa": 450.0, "mc_exponent": 0.25, "hb": "60–120 HB"}, {"code": "N2", "iso_group": "N", "name_ru": "Медь и латунь (ЛС59-1, БрАЖ9-4)", "kc1_1_mpa": 750.0, "mc_exponent": 0.24, "hb": "70–140 HB"}, {"code": "S1", "iso_group": "S", "name_ru": "Никелевые суперсплавы (Inconel 718, ХН77ТЮР)", "kc1_1_mpa": 2600.0, "mc_exponent": 0.24, "hb": "260–380 HB"}, {"code": "S2", "iso_group": "S", "name_ru": "Титановые сплавы (ВТ6, Ti-6Al-4V)", "kc1_1_mpa": 1450.0, "mc_exponent": 0.23, "hb": "280–350 HB"}, {"code": "H1", "iso_group": "H", "name_ru": "Закалённые стали 48–58 HRC (Х12МФ, ШХ15, D2)", "kc1_1_mpa": 3200.0, "mc_exponent": 0.3, "hb": "48–58 HRC"}], "machines": [{"id": "m1", "name": "Токарно-фрезерный центр (BMT55)", "machine_type": "TURN_MILL", "max_rpm": 4500, "spindle_power_kw": 18.5, "max_torque_nm": 320.0, "rigidity_class": "HIGH"}, {"id": "m2", "name": "Вертикальный фрезерный ОЦ (BT40)", "machine_type": "MILL_3AX", "max_rpm": 12000, "spindle_power_kw": 15.0, "max_torque_nm": 95.0, "rigidity_class": "MEDIUM"}, {"id": "m3", "name": "Универсальный токарный ЧПУ (лёгкий)", "machine_type": "LATHE", "max_rpm": 3000, "spindle_power_kw": 7.5, "max_torque_nm": 160.0, "rigidity_class": "LOW"}], "inserts": [{"insert_id": "ins-1", "iso_code": "CNMG 120408", "operation_domain": "TURNING", "grade_code": "GEN-P25-CVD", "coating_method": "CVD", "coating_composition": "TiCN-Al2O3-TiN", "chipbreaker_code": "GEN-PM", "application_class": "MEDIUM", "edge_prep": "HONED", "toughness": 6, "wear": 8, "cutting_edges_count": 4, "relative_cost": 1.0, "seat_pocket_signature": "C-N-1270-476-G", "suitability": {"P": "PRIMARY", "K": "SECONDARY"}, "operating_zone_polygon": [[0.15, 1.0], [0.22, 0.8], [0.45, 1.2], [0.42, 4.5], [0.2, 4.0], [0.15, 2.2]], "holders": [{"code": "PCLNR 2525M 12", "category": "TURNING_EXTERNAL", "lead_angle_deg": 95.0, "clamping": "LEVER"}], "recs": {"P1": {"vc": 290.0, "vc_min": 220.0, "vc_max": 360.0, "feed": 0.3, "ap": 2.5, "coolant": "FLOOD"}, "P2": {"vc": 240.0, "vc_min": 180.0, "vc_max": 300.0, "feed": 0.28, "ap": 2.2, "coolant": "FLOOD"}, "P3": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.24, "ap": 2.0, "coolant": "FLOOD"}, "K1": {"vc": 260.0, "vc_min": 200.0, "vc_max": 320.0, "feed": 0.32, "ap": 2.5, "coolant": "DRY"}}}, {"insert_id": "ins-2", "iso_code": "CNMG 120404", "operation_domain": "TURNING", "grade_code": "GEN-M25-PVD", "coating_method": "PVD", "coating_composition": "AlTiN", "chipbreaker_code": "GEN-MF", "application_class": "FINISHING", "edge_prep": "SHARP", "toughness": 8, "wear": 6, "cutting_edges_count": 4, "relative_cost": 1.15, "seat_pocket_signature": "C-N-1270-476-G", "suitability": {"M": "PRIMARY", "S": "PRIMARY", "P": "SECONDARY"}, "operating_zone_polygon": [[0.08, 0.3], [0.15, 0.25], [0.25, 0.4], [0.22, 2.0], [0.1, 1.6]], "holders": [{"code": "PCLNR 2525M 12", "category": "TURNING_EXTERNAL", "lead_angle_deg": 95.0, "clamping": "LEVER"}], "recs": {"M1": {"vc": 165.0, "vc_min": 120.0, "vc_max": 210.0, "feed": 0.16, "ap": 1.0, "coolant": "FLOOD"}, "M2": {"vc": 125.0, "vc_min": 90.0, "vc_max": 160.0, "feed": 0.14, "ap": 0.8, "coolant": "HIGH_PRESSURE_THROUGH"}, "S2": {"vc": 55.0, "vc_min": 40.0, "vc_max": 75.0, "feed": 0.12, "ap": 0.8, "coolant": "HIGH_PRESSURE_THROUGH"}, "P1": {"vc": 230.0, "vc_min": 180.0, "vc_max": 280.0, "feed": 0.18, "ap": 1.2, "coolant": "FLOOD"}}}, {"insert_id": "ins-3", "iso_code": "CCMT 09T304", "operation_domain": "TURNING", "grade_code": "GEN-M25-PVD", "coating_method": "PVD", "coating_composition": "AlTiN", "chipbreaker_code": "GEN-MF", "application_class": "FINISHING", "edge_prep": "SHARP", "toughness": 8, "wear": 6, "cutting_edges_count": 2, "relative_cost": 0.9, "seat_pocket_signature": "C-C-953-397-T", "suitability": {"M": "PRIMARY", "S": "PRIMARY", "P": "SECONDARY"}, "operating_zone_polygon": [[0.08, 0.3], [0.15, 0.25], [0.25, 0.4], [0.22, 2.0], [0.1, 1.6]], "holders": [{"code": "S20R-SCLCR 09", "category": "BORING_BAR", "lead_angle_deg": 95.0, "clamping": "SCREW"}], "recs": {"M1": {"vc": 155.0, "vc_min": 110.0, "vc_max": 195.0, "feed": 0.14, "ap": 0.8, "coolant": "FLOOD"}, "P1": {"vc": 220.0, "vc_min": 160.0, "vc_max": 270.0, "feed": 0.16, "ap": 1.0, "coolant": "FLOOD"}, "S2": {"vc": 50.0, "vc_min": 35.0, "vc_max": 68.0, "feed": 0.1, "ap": 0.6, "coolant": "HIGH_PRESSURE_THROUGH"}}}, {"insert_id": "ins-7", "iso_code": "WNMG 080408", "operation_domain": "TURNING", "grade_code": "GEN-P25-CVD", "coating_method": "CVD", "coating_composition": "TiCN-Al2O3-TiN", "chipbreaker_code": "GEN-PM", "application_class": "MEDIUM", "edge_prep": "HONED", "toughness": 6, "wear": 8, "cutting_edges_count": 6, "relative_cost": 1.05, "seat_pocket_signature": "W-N-1270-476-G", "suitability": {"P": "PRIMARY", "K": "SECONDARY"}, "operating_zone_polygon": [[0.15, 1.0], [0.22, 0.8], [0.45, 1.2], [0.42, 4.5], [0.2, 4.0], [0.15, 2.2]], "holders": [{"code": "PWLNR 2525M 08", "category": "TURNING_EXTERNAL", "lead_angle_deg": 95.0, "clamping": "LEVER"}], "recs": {"P1": {"vc": 290.0, "vc_min": 220.0, "vc_max": 360.0, "feed": 0.3, "ap": 2.5, "coolant": "FLOOD"}, "P2": {"vc": 240.0, "vc_min": 180.0, "vc_max": 300.0, "feed": 0.28, "ap": 2.2, "coolant": "FLOOD"}, "P3": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.24, "ap": 2.0, "coolant": "FLOOD"}, "K1": {"vc": 260.0, "vc_min": 200.0, "vc_max": 320.0, "feed": 0.32, "ap": 2.5, "coolant": "DRY"}}}, {"insert_id": "ins-8", "iso_code": "WNMG 080412", "operation_domain": "TURNING", "grade_code": "GEN-P35-TOUGH", "coating_method": "CVD", "coating_composition": "MT-TiCN-Al2O3", "chipbreaker_code": "GEN-PR", "application_class": "ROUGHING", "edge_prep": "CHAMFERED_HONED", "toughness": 8, "wear": 6, "cutting_edges_count": 6, "relative_cost": 1.12, "seat_pocket_signature": "W-N-1270-476-G", "suitability": {"P": "PRIMARY", "M": "SECONDARY"}, "operating_zone_polygon": [[0.25, 1.8], [0.35, 1.5], [0.65, 2.0], [0.58, 6.5], [0.3, 6.0], [0.25, 3.5]], "holders": [{"code": "PWLNR 2525M 08", "category": "TURNING_EXTERNAL", "lead_angle_deg": 95.0, "clamping": "LEVER"}], "recs": {"P1": {"vc": 245.0, "vc_min": 180.0, "vc_max": 310.0, "feed": 0.42, "ap": 3.8, "coolant": "FLOOD"}, "P2": {"vc": 205.0, "vc_min": 150.0, "vc_max": 260.0, "feed": 0.38, "ap": 3.5, "coolant": "FLOOD"}, "M1": {"vc": 145.0, "vc_min": 110.0, "vc_max": 180.0, "feed": 0.32, "ap": 3.0, "coolant": "FLOOD"}}}, {"insert_id": "ins-9", "iso_code": "DNMG 150608", "operation_domain": "TURNING", "grade_code": "GEN-P25-CVD", "coating_method": "CVD", "coating_composition": "TiCN-Al2O3-TiN", "chipbreaker_code": "GEN-PM", "application_class": "MEDIUM", "edge_prep": "HONED", "toughness": 6, "wear": 8, "cutting_edges_count": 4, "relative_cost": 1.25, "seat_pocket_signature": "D-N-1270-635-G", "suitability": {"P": "PRIMARY", "K": "SECONDARY"}, "operating_zone_polygon": [[0.15, 1.0], [0.22, 0.8], [0.45, 1.2], [0.42, 4.5], [0.2, 4.0], [0.15, 2.2]], "holders": [{"code": "PDJNR 2525M 15", "category": "TURNING_EXTERNAL", "lead_angle_deg": 93.0, "clamping": "LEVER"}], "recs": {"P1": {"vc": 290.0, "vc_min": 220.0, "vc_max": 360.0, "feed": 0.3, "ap": 2.5, "coolant": "FLOOD"}, "P2": {"vc": 240.0, "vc_min": 180.0, "vc_max": 300.0, "feed": 0.28, "ap": 2.2, "coolant": "FLOOD"}, "K1": {"vc": 260.0, "vc_min": 200.0, "vc_max": 320.0, "feed": 0.32, "ap": 2.5, "coolant": "DRY"}}}, {"insert_id": "ins-10", "iso_code": "VNMG 160404", "operation_domain": "TURNING", "grade_code": "GEN-S15-PVD", "coating_method": "PVD", "coating_composition": "AlTiSiN-Nano", "chipbreaker_code": "GEN-MF", "application_class": "FINISHING", "edge_prep": "SHARP", "toughness": 7, "wear": 8, "cutting_edges_count": 4, "relative_cost": 1.35, "seat_pocket_signature": "V-N-953-476-G", "suitability": {"S": "PRIMARY", "M": "PRIMARY"}, "operating_zone_polygon": [[0.08, 0.3], [0.15, 0.25], [0.25, 0.4], [0.22, 2.0], [0.1, 1.6]], "holders": [{"code": "MVJNR 2525M 16", "category": "TURNING_EXTERNAL", "lead_angle_deg": 93.0, "clamping": "TOP_CLAMP"}], "recs": {"S1": {"vc": 40.0, "vc_min": 25.0, "vc_max": 55.0, "feed": 0.12, "ap": 0.8, "coolant": "HIGH_PRESSURE_THROUGH"}, "S2": {"vc": 65.0, "vc_min": 45.0, "vc_max": 85.0, "feed": 0.14, "ap": 1.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "M1": {"vc": 175.0, "vc_min": 130.0, "vc_max": 220.0, "feed": 0.15, "ap": 1.0, "coolant": "FLOOD"}}}, {"insert_id": "ins-11", "iso_code": "SNMG 120412", "operation_domain": "TURNING", "grade_code": "GEN-K15-CVD", "coating_method": "CVD", "coating_composition": "Thick Al2O3-TiCN", "chipbreaker_code": "GEN-KR", "application_class": "ROUGHING", "edge_prep": "CHAMFERED", "toughness": 5, "wear": 9, "cutting_edges_count": 8, "relative_cost": 1.1, "seat_pocket_signature": "S-N-1270-476-G", "suitability": {"K": "PRIMARY", "P": "SECONDARY"}, "operating_zone_polygon": [[0.2, 1.0], [0.6, 1.2], [0.55, 6.0], [0.2, 5.5]], "holders": [{"code": "PSBNR 2525M 12", "category": "TURNING_EXTERNAL", "lead_angle_deg": 75.0, "clamping": "LEVER"}], "recs": {"K1": {"vc": 340.0, "vc_min": 260.0, "vc_max": 420.0, "feed": 0.35, "ap": 3.0, "coolant": "DRY"}, "K2": {"vc": 240.0, "vc_min": 180.0, "vc_max": 300.0, "feed": 0.32, "ap": 2.8, "coolant": "FLOOD"}, "P1": {"vc": 270.0, "vc_min": 210.0, "vc_max": 330.0, "feed": 0.34, "ap": 3.0, "coolant": "FLOOD"}}}, {"insert_id": "ins-12", "iso_code": "DCMT 11T304", "operation_domain": "TURNING", "grade_code": "GEN-N10-UNC", "coating_method": "UNCOATED", "coating_composition": "Polished Submicron", "chipbreaker_code": "GEN-MF", "application_class": "FINISHING", "edge_prep": "SHARP", "toughness": 7, "wear": 7, "cutting_edges_count": 2, "relative_cost": 0.95, "seat_pocket_signature": "D-C-953-397-T", "suitability": {"N": "PRIMARY"}, "operating_zone_polygon": [[0.08, 0.3], [0.15, 0.25], [0.25, 0.4], [0.22, 2.0], [0.1, 1.6]], "holders": [{"code": "S16Q-SDUCR 11", "category": "BORING_BAR", "lead_angle_deg": 93.0, "clamping": "SCREW"}], "recs": {"N1": {"vc": 700.0, "vc_min": 450.0, "vc_max": 1000.0, "feed": 0.18, "ap": 1.2, "coolant": "FLOOD"}, "N2": {"vc": 320.0, "vc_min": 220.0, "vc_max": 450.0, "feed": 0.16, "ap": 1.0, "coolant": "FLOOD"}}}, {"insert_id": "ins-13", "iso_code": "CNGA 120408", "operation_domain": "TURNING", "grade_code": "GEN-H10-CBN", "coating_method": "PVD", "coating_composition": "TiAlN-CBN", "chipbreaker_code": "GEN-HCBN", "application_class": "FINISHING", "edge_prep": "CHAMFERED", "toughness": 3, "wear": 10, "cutting_edges_count": 4, "relative_cost": 4.8, "seat_pocket_signature": "C-N-1270-476-A", "suitability": {"H": "PRIMARY", "K": "SECONDARY"}, "operating_zone_polygon": [[0.05, 0.1], [0.12, 0.08], [0.18, 0.15], [0.16, 0.8], [0.06, 0.65]], "holders": [{"code": "PCLNR 2525M 12", "category": "TURNING_EXTERNAL", "lead_angle_deg": 95.0, "clamping": "LEVER"}], "recs": {"H1": {"vc": 155.0, "vc_min": 110.0, "vc_max": 200.0, "feed": 0.1, "ap": 0.25, "coolant": "DRY"}, "K1": {"vc": 480.0, "vc_min": 350.0, "vc_max": 620.0, "feed": 0.14, "ap": 0.4, "coolant": "DRY"}}}, {"insert_id": "ins-4", "iso_code": "APKT 160408", "operation_domain": "MILLING", "grade_code": "GEN-PM30-MILL", "coating_method": "PVD", "coating_composition": "TiAlSiN", "chipbreaker_code": "GEN-GM", "application_class": "MEDIUM", "edge_prep": "CHAMFERED_HONED", "toughness": 8, "wear": 7, "cutting_edges_count": 2, "relative_cost": 1.2, "seat_pocket_signature": "A-P-953-476-T", "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "SECONDARY"}, "operating_zone_polygon": [[0.08, 0.5], [0.22, 0.8], [0.18, 10.0], [0.08, 8.0]], "holders": [{"code": "SHM-AP16-D50-Z5", "category": "SHOULDER_MILL", "lead_angle_deg": 90.0, "dc_mm": 50.0, "z": 5, "clamping": "SCREW"}], "recs": {"P1": {"vc": 210.0, "vc_min": 160.0, "vc_max": 260.0, "feed": 0.15, "ap": 3.5, "ae_ratio": 0.5, "coolant": "AIR_BLAST"}, "P2": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.14, "ap": 3.0, "ae_ratio": 0.5, "coolant": "AIR_BLAST"}, "M1": {"vc": 135.0, "vc_min": 100.0, "vc_max": 170.0, "feed": 0.12, "ap": 2.5, "ae_ratio": 0.4, "coolant": "FLOOD"}, "K1": {"vc": 220.0, "vc_min": 170.0, "vc_max": 270.0, "feed": 0.16, "ap": 4.0, "ae_ratio": 0.6, "coolant": "DRY"}}}, {"insert_id": "ins-5", "iso_code": "APKT 160408-AL", "operation_domain": "MILLING", "grade_code": "GEN-N10-UNC", "coating_method": "UNCOATED", "coating_composition": "Polished Submicron", "chipbreaker_code": "GEN-AL", "application_class": "ALUMINUM_SHARP", "edge_prep": "SHARP", "toughness": 7, "wear": 7, "cutting_edges_count": 2, "relative_cost": 1.25, "seat_pocket_signature": "A-P-953-476-T", "suitability": {"N": "PRIMARY"}, "operating_zone_polygon": [[0.05, 0.5], [0.25, 1.0], [0.2, 12.0], [0.05, 10.0]], "holders": [{"code": "SHM-AP16-D50-Z5", "category": "SHOULDER_MILL", "lead_angle_deg": 90.0, "dc_mm": 50.0, "z": 5, "clamping": "SCREW"}], "recs": {"N1": {"vc": 650.0, "vc_min": 400.0, "vc_max": 900.0, "feed": 0.15, "ap": 4.0, "ae_ratio": 0.6, "coolant": "FLOOD"}, "N2": {"vc": 320.0, "vc_min": 220.0, "vc_max": 420.0, "feed": 0.14, "ap": 3.0, "ae_ratio": 0.55, "coolant": "FLOOD"}}}, {"insert_id": "ins-14", "iso_code": "SEKT 120408", "operation_domain": "MILLING", "grade_code": "GEN-PM30-MILL", "coating_method": "PVD", "coating_composition": "TiAlSiN", "chipbreaker_code": "GEN-FM45", "application_class": "MEDIUM", "edge_prep": "CHAMFERED_HONED", "toughness": 8, "wear": 7, "cutting_edges_count": 4, "relative_cost": 1.3, "seat_pocket_signature": "S-E-1270-476-T", "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "SECONDARY"}, "operating_zone_polygon": [[0.1, 0.5], [0.3, 0.8], [0.26, 5.5], [0.1, 5.0]], "holders": [{"code": "FM45-SE12-D80-Z6", "category": "FACE_MILL", "lead_angle_deg": 45.0, "dc_mm": 80.0, "z": 6, "clamping": "SCREW"}], "recs": {"P1": {"vc": 235.0, "vc_min": 180.0, "vc_max": 290.0, "feed": 0.22, "ap": 3.0, "ae_ratio": 0.65, "coolant": "AIR_BLAST"}, "P2": {"vc": 200.0, "vc_min": 155.0, "vc_max": 250.0, "feed": 0.19, "ap": 2.8, "ae_ratio": 0.65, "coolant": "AIR_BLAST"}, "K1": {"vc": 260.0, "vc_min": 200.0, "vc_max": 320.0, "feed": 0.24, "ap": 3.5, "ae_ratio": 0.7, "coolant": "DRY"}, "M1": {"vc": 145.0, "vc_min": 110.0, "vc_max": 180.0, "feed": 0.16, "ap": 2.5, "ae_ratio": 0.55, "coolant": "FLOOD"}}}, {"insert_id": "ins-15", "iso_code": "RDMT 120400", "operation_domain": "MILLING", "grade_code": "GEN-S15-PVD", "coating_method": "PVD", "coating_composition": "AlTiSiN-Nano", "chipbreaker_code": "GEN-RND", "application_class": "ROUGHING", "edge_prep": "HONED", "toughness": 7, "wear": 8, "cutting_edges_count": 6, "relative_cost": 1.4, "seat_pocket_signature": "R-D-1200-476-T", "suitability": {"S": "PRIMARY", "M": "PRIMARY"}, "operating_zone_polygon": [[0.12, 0.5], [0.35, 0.8], [0.3, 5.0], [0.12, 4.5]], "holders": [{"code": "CM-RD12-D50-Z4", "category": "COPY_MILL", "lead_angle_deg": 45.0, "dc_mm": 50.0, "z": 4, "clamping": "SCREW"}], "recs": {"S1": {"vc": 38.0, "vc_min": 25.0, "vc_max": 52.0, "feed": 0.2, "ap": 1.5, "ae_ratio": 0.35, "coolant": "FLOOD"}, "S2": {"vc": 65.0, "vc_min": 45.0, "vc_max": 85.0, "feed": 0.22, "ap": 2.0, "ae_ratio": 0.4, "coolant": "FLOOD"}, "M1": {"vc": 150.0, "vc_min": 110.0, "vc_max": 190.0, "feed": 0.24, "ap": 2.5, "ae_ratio": 0.5, "coolant": "FLOOD"}}}, {"insert_id": "ins-6", "iso_code": "WCMX 050308", "operation_domain": "DRILLING", "grade_code": "GEN-DRL-CORE", "coating_method": "PVD", "coating_composition": "TiAlN", "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED", "toughness": 9, "wear": 5, "cutting_edges_count": 3, "relative_cost": 1.1, "seat_pocket_signature": "W-C-794-318-X", "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "SECONDARY"}, "operating_zone_polygon": [], "holders": [{"code": "UDRL-WCMX05-D26-3D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 26.0, "z": 1, "clamping": "SCREW"}], "recs": {"P1": {"vc": 160.0, "vc_min": 120.0, "vc_max": 200.0, "feed": 0.11, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "P2": {"vc": 135.0, "vc_min": 100.0, "vc_max": 170.0, "feed": 0.09, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "M1": {"vc": 110.0, "vc_min": 80.0, "vc_max": 140.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}}}, {"insert_id": "ins-16", "iso_code": "SPMG 07T308", "operation_domain": "DRILLING", "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN", "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED", "toughness": 8, "wear": 7, "cutting_edges_count": 4, "relative_cost": 1.15, "seat_pocket_signature": "S-P-794-397-G", "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "S": "SECONDARY"}, "operating_zone_polygon": [], "holders": [{"code": "UDRL-SPMG07-D22-4D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 22.0, "z": 1, "clamping": "SCREW"}], "recs": {"P1": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "P2": {"vc": 155.0, "vc_min": 115.0, "vc_max": 195.0, "feed": 0.1, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "M1": {"vc": 120.0, "vc_min": 90.0, "vc_max": 150.0, "feed": 0.09, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "K1": {"vc": 200.0, "vc_min": 150.0, "vc_max": 250.0, "feed": 0.14, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "S2": {"vc": 50.0, "vc_min": 35.0, "vc_max": 65.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}}}, {"insert_id": "ins-17", "iso_code": "SPMG 090408", "operation_domain": "DRILLING", "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN", "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED", "toughness": 8, "wear": 7, "cutting_edges_count": 4, "relative_cost": 1.3, "seat_pocket_signature": "S-P-953-476-G", "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "S": "SECONDARY"}, "operating_zone_polygon": [], "holders": [{"code": "UDRL-SPMG09-D32-3D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 32.0, "z": 1, "clamping": "SCREW"}], "recs": {"P1": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "P2": {"vc": 155.0, "vc_min": 115.0, "vc_max": 195.0, "feed": 0.1, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "M1": {"vc": 120.0, "vc_min": 90.0, "vc_max": 150.0, "feed": 0.09, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "K1": {"vc": 200.0, "vc_min": 150.0, "vc_max": 250.0, "feed": 0.14, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}, "S2": {"vc": 50.0, "vc_min": 35.0, "vc_max": 65.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"}}}], "cross_references": [{"source_insert_id": "ins-1", "target_insert_id": "ins-7", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.92, "notes": "WNMG 080408 даёт 6 кромок вместо 4 при том же угле 80° (державка PWLNR)"}, {"source_insert_id": "ins-7", "target_insert_id": "ins-1", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.92, "notes": "CNMG 120408 обеспечивает большую глубину резания ap при том же угле 80°"}, {"source_insert_id": "ins-1", "target_insert_id": "ins-2", "match_type": "HIGHER_TOUGHNESS", "confidence_score": 0.88, "notes": "Та же державка PCLNR 12; переход на острую PVD-кромку и радиус 0.4"}, {"source_insert_id": "ins-1", "target_insert_id": "ins-13", "match_type": "HIGHER_WEAR_RESISTANCE", "confidence_score": 0.85, "notes": "Та же державка PCLNR 12; переход на CBN для закалённых сталей >48 HRC"}, {"source_insert_id": "ins-7", "target_insert_id": "ins-8", "match_type": "HIGHER_TOUGHNESS", "confidence_score": 0.95, "notes": "То же гнездо PWLNR 08; усиленный черновой стружколом и сплав P35"}, {"source_insert_id": "ins-9", "target_insert_id": "ins-10", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.8, "notes": "Переход с 55° (DNMG) на 35° (VNMG) для сложного профилирования"}, {"source_insert_id": "ins-6", "target_insert_id": "ins-16", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.86, "notes": "SPMG 07T308 даёт 4 кромки вместо 3 у WCMX (корпус UDRL-SPMG07)"}]};
 
 const state = {
   apiLive: false,
@@ -496,20 +396,17 @@ const state = {
   chartBounds: { fMin: 0.05, fMax: 0.5, apMin: 0, apMax: 5 }
 };
 
-// ============================================================================
-// ISO 1832 Client Parser & SVG Shape Renderer
-// ============================================================================
 const SHAPES = {
   C:{name:"Ромб 80°", edges:2, icF:1.016}, D:{name:"Ромб 55°", edges:2, icF:0.819},
   S:{name:"Квадрат 90°", edges:4, icF:1.0}, T:{name:"Треугольник 60°", edges:3, icF:0.577},
   V:{name:"Ромб 35°", edges:2, icF:0.574}, W:{name:"Тригон 80°", edges:3, icF:1.464},
-  R:{name:"Круг", edges:1, icF:1.0}, A:{name:"Параллелограмм 85°", edges:2, icF:0.577}
+  R:{name:"Круг", edges:6, icF:1.0}, A:{name:"Параллелограмм 85°", edges:2, icF:0.577}
 };
-const CLEAR = { N:[0,"Негативная 0°"], C:[7,"Позитивная 7°"], P:[11,"Позитивная 11°"], B:[5,"Позитивная 5°"], A:[3,"Позитивная 3°"], E:[20,"Позитивная 20°"] };
+const CLEAR = { N:[0,"Негативная 0°"], C:[7,"Позитивная 7°"], P:[11,"Позитивная 11°"], D:[15,"Позитивная 15°"], B:[5,"Позитивная 5°"], A:[3,"Позитивная 3°"], E:[20,"Позитивная 20°"] };
 const TOL = { M:"Прессованная (±0.05..0.15)", G:"Шлифованная (±0.025)", E:"Прецизионная", K:"Фрезерная шлиф.", U:"Черновая" };
-const FIX = { G:["Цил. отв., 2-ст. стружк.",true], M:["Цил. отв., 1-ст. стружк.",false], T:["Зенковка (винт), 1-ст.",false], X:["Спец. сверл./фрез.",false], W:["Зенковка без стружк.",false], N:["Без отв. (прихват)",true] };
+const FIX = { G:["Цил. отв., 2-ст. стружк.",true], M:["Цил. отв., 1-ст. стружк.",false], T:["Зенковка (винт), 1-ст.",false], A:["Цил. отв., без стружк. (CBN)",true], X:["Спец. сверл./фрез.",false], W:["Зенковка без стружк.",false], N:["Без отв. (прихват)",true] };
 const THK = { "01":1.59,"T1":1.98,"02":2.38,"03":3.18,"T3":3.97,"04":4.76,"05":5.56,"06":6.35 };
-const IC_STD = { "C06":6.35,"C09":9.525,"C12":12.7,"C16":15.875,"D11":9.525,"D15":12.7,"S12":12.7,"T16":9.525,"W05":7.938,"W06":9.525,"W08":12.7,"A16":9.525 };
+const IC_STD = { "C06":6.35,"C09":9.525,"C12":12.7,"C16":15.875,"D11":9.525,"D15":12.7,"S07":7.938,"S09":9.525,"S12":12.7,"T16":9.525,"V16":9.525,"W05":7.938,"W06":9.525,"W08":12.7,"A16":9.525,"R12":12.0 };
 
 function parseIsoClient(raw) {
   const cleaned = (raw || "").replace(/[^A-Za-z0-9\-]/g, "").toUpperCase();
@@ -523,10 +420,10 @@ function parseIsoClient(raw) {
   const len = parseFloat(s5) || 12;
   const ic = IC_STD[s1+s5] || +(len * SHAPES[s1].icF).toFixed(3);
   const thk = THK[s6];
-  const rad = +(parseInt(s7, 10) / 10).toFixed(2);
+  const rad = (s1 === "R" && (s7 === "00" || s7 === "M0")) ? +(ic/2).toFixed(2) : +(parseInt(s7, 10) / 10).toFixed(2);
   const dbl = (s2 === "N") && FIX[s4][1];
   const edges = SHAPES[s1].edges * (dbl ? 2 : 1);
-  const pocket = `${s1}-${s2}-${Math.round(ic*100)}-${Math.round(thk*100)}-${s4}`;
+  const pocket = `${s1}-${s2}-${Math.floor(ic*100 + 0.5)}-${Math.floor(thk*100 + 0.5)}-${s4}`;
   return {
     valid: true, shape_code: s1, ic_mm: ic, thickness_mm: thk, corner_radius_mm: rad,
     cutting_edges_count: edges, seat_pocket_signature: pocket,
@@ -546,17 +443,14 @@ function renderInsertSVG(shape) {
   const shapesSvg = {
     C: `<polygon points="55,12 92,55 55,98 18,55" fill="#1e293b" stroke="#38bdf8" stroke-width="3" stroke-linejoin="round"/>`,
     D: `<polygon points="55,8 84,55 55,102 26,55" fill="#1e293b" stroke="#38bdf8" stroke-width="3" stroke-linejoin="round"/>`,
+    V: `<polygon points="55,6 76,55 55,104 34,55" fill="#1e293b" stroke="#38bdf8" stroke-width="3" stroke-linejoin="round"/>`,
     S: `<rect x="20" y="20" width="70" height="70" rx="6" fill="#1e293b" stroke="#38bdf8" stroke-width="3"/>`,
     T: `<polygon points="55,14 96,88 14,88" fill="#1e293b" stroke="#38bdf8" stroke-width="3" stroke-linejoin="round"/>`,
     W: `<polygon points="55,14 90,34 86,78 55,96 24,78 20,34" fill="#1e293b" stroke="#38bdf8" stroke-width="3" stroke-linejoin="round"/>`,
     A: `<polygon points="34,14 84,18 76,96 26,92" fill="#1e293b" stroke="#38bdf8" stroke-width="3" stroke-linejoin="round"/>`,
     R: `<circle cx="55" cy="55" r="36" fill="#1e293b" stroke="#38bdf8" stroke-width="3"/>`
   };
-  const body = shapesSvg[shape] || shapesSvg.C;
-  return `<svg viewBox="0 0 110 110" width="96" height="96">
-    ${body}
-    <circle cx="55" cy="55" r="11" fill="#0b111a" stroke="#64748b" stroke-width="2"/>
-  </svg>`;
+  return `<svg viewBox="0 0 110 110" width="96" height="96">${shapesSvg[shape] || shapesSvg.C}<circle cx="55" cy="55" r="11" fill="#0b111a" stroke="#64748b" stroke-width="2"/></svg>`;
 }
 
 async function handleIsoInput() {
@@ -601,26 +495,14 @@ async function handleIsoInput() {
   `;
 }
 
-function setIso(code) {
-  document.getElementById("isoInput").value = code;
-  handleIsoInput();
-}
+function setIso(code) { document.getElementById("isoInput").value = code; handleIsoInput(); }
+function togglePocketFilter(sig) { state.pocketFilter = (state.pocketFilter === sig) ? null : sig; handleIsoInput(); runSelection(); }
 
-function togglePocketFilter(sig) {
-  state.pocketFilter = (state.pocketFilter === sig) ? null : sig;
-  handleIsoInput();
-  runSelection();
-}
-
-// ============================================================================
-// Client-side Kienzle Physics Engine (mirrors app/kienzle.py)
-// ============================================================================
 function pointInPoly(x, y, poly) {
   if (!poly || poly.length < 3) return true;
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i][0], yi = poly[i][1];
-    const xj = poly[j][0], yj = poly[j][1];
+    const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
     const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi);
     if (intersect) inside = !inside;
   }
@@ -665,7 +547,6 @@ function calcKienzleClient(inp) {
   }
   const pMot = pNet / 0.80;
   const trq = (9550 * pMot) / Math.max(rpm, 1);
-
   if (inp.machine_max_power_kw && pMot > inp.machine_max_power_kw)
     warnings.push(`Мощность (${pMot.toFixed(2)} кВт) превышает предел станка (${inp.machine_max_power_kw} кВт).`);
   if (inp.machine_max_torque_nm && trq > inp.machine_max_torque_nm)
@@ -684,15 +565,8 @@ function calcKienzleClient(inp) {
   };
 }
 
-// ============================================================================
-// Selection, UI Updates & Interactive SVG Chipbreaker Map
-// ============================================================================
-function fmtLen(mm) {
-  return state.units === "metric" ? `${mm.toFixed(2)} мм` : `${(mm / 25.4).toFixed(4)} in`;
-}
-function fmtVc(vc) {
-  return state.units === "metric" ? `${vc.toFixed(0)} м/мин` : `${(vc * 3.28084).toFixed(0)} SFM`;
-}
+function fmtLen(mm) { return state.units === "metric" ? `${mm.toFixed(2)} мм` : `${(mm / 25.4).toFixed(4)} in`; }
+function fmtVc(vc) { return state.units === "metric" ? `${vc.toFixed(0)} м/мин` : `${(vc * 3.28084).toFixed(0)} SFM`; }
 
 function setUnits(u) {
   state.units = u;
@@ -719,35 +593,34 @@ function selectIsoGroup(g) {
   state.isoGroup = g;
   document.querySelectorAll(".iso-btn").forEach(b => b.classList.toggle("active", b.dataset.g === g));
   populateSubgroups();
+  if (g === "H" && state.op === "TURNING") {
+    document.getElementById("apSlider").value = 0.3;
+    document.getElementById("feedSlider").value = 0.10;
+    updateSliderLabels();
+  }
   runSelection();
 }
 
 function selectOp(op) {
   state.op = op;
   document.querySelectorAll("[data-op]").forEach(b => b.classList.toggle("active", b.dataset.op === op));
-  const apF = document.getElementById("apField");
-  const aeF = document.getElementById("aeField");
-  const feedLbl = document.getElementById("feedLabel");
-  const feedSl = document.getElementById("feedSlider");
-  const apSl = document.getElementById("apSlider");
-  const diamLbl = document.getElementById("diamLabel");
+  const apF = document.getElementById("apField"), aeF = document.getElementById("aeField");
+  const feedLbl = document.getElementById("feedLabel"), feedSl = document.getElementById("feedSlider");
+  const apSl = document.getElementById("apSlider"), diamLbl = document.getElementById("diamLabel");
 
   if (op === "TURNING") {
     apF.style.display = "block"; aeF.style.display = "none";
-    feedLbl.innerHTML = "Подача на оборот f<sub>n</sub>";
-    diamLbl.textContent = "Диаметр заготовки D";
-    feedSl.min = 0.05; feedSl.max = 0.50; feedSl.value = 0.25;
-    apSl.min = 0.2; apSl.max = 5.5; apSl.value = 2.0;
+    feedLbl.innerHTML = "Подача на оборот f<sub>n</sub>"; diamLbl.textContent = "Диаметр заготовки D";
+    feedSl.min = 0.05; feedSl.max = 0.60; feedSl.value = 0.25;
+    apSl.min = 0.1; apSl.max = 6.5; apSl.value = 2.0;
   } else if (op === "MILLING") {
     apF.style.display = "block"; aeF.style.display = "block";
-    feedLbl.innerHTML = "Подача на зуб f<sub>z</sub>";
-    diamLbl.textContent = "Диаметр фрезы D<sub>c</sub>";
-    feedSl.min = 0.04; feedSl.max = 0.30; feedSl.value = 0.14;
-    apSl.min = 0.5; apSl.max = 12.0; apSl.value = 3.5;
+    feedLbl.innerHTML = "Подача на зуб f<sub>z</sub>"; diamLbl.textContent = "Диаметр фрезы D<sub>c</sub>";
+    feedSl.min = 0.04; feedSl.max = 0.35; feedSl.value = 0.15;
+    apSl.min = 0.5; apSl.max = 12.0; apSl.value = 3.0;
   } else {
     apF.style.display = "none"; aeF.style.display = "none";
-    feedLbl.innerHTML = "Подача сверления f<sub>n</sub>";
-    diamLbl.textContent = "Диаметр сверла D<sub>c</sub>";
+    feedLbl.innerHTML = "Подача сверления f<sub>n</sub>"; diamLbl.textContent = "Диаметр сверла D<sub>c</sub>";
     feedSl.min = 0.04; feedSl.max = 0.20; feedSl.value = 0.11;
     document.getElementById("diamSlider").value = 26;
   }
@@ -762,20 +635,13 @@ function selectStability(st) {
 }
 
 function updateSliderLabels() {
-  const ap = parseFloat(document.getElementById("apSlider").value);
-  const feed = parseFloat(document.getElementById("feedSlider").value);
-  const ae = parseFloat(document.getElementById("aeSlider").value);
-  const d = parseFloat(document.getElementById("diamSlider").value);
-  document.getElementById("apVal").textContent = fmtLen(ap);
-  document.getElementById("feedVal").textContent = fmtLen(feed);
-  document.getElementById("aeVal").textContent = fmtLen(ae);
-  document.getElementById("diamVal").textContent = fmtLen(d);
+  document.getElementById("apVal").textContent = fmtLen(parseFloat(document.getElementById("apSlider").value));
+  document.getElementById("feedVal").textContent = fmtLen(parseFloat(document.getElementById("feedSlider").value));
+  document.getElementById("aeVal").textContent = fmtLen(parseFloat(document.getElementById("aeSlider").value));
+  document.getElementById("diamVal").textContent = fmtLen(parseFloat(document.getElementById("diamSlider").value));
 }
 
-function onSliderChange() {
-  updateSliderLabels();
-  runSelection();
-}
+function onSliderChange() { updateSliderLabels(); runSelection(); }
 
 async function runSelection() {
   updateKienzleBadge();
@@ -808,12 +674,12 @@ async function runSelection() {
     state.selectedId = results.length ? results[0].insert_id : null;
   }
   renderCandidates();
-  renderSelectedDetails();
+  await renderSelectedDetails();
 }
 
 function runSelectionClient(req) {
   const sg = FALLBACK_DB.subgroups.find(s => s.code === req.material_subgroup);
-  const m = FALLBACK_DB.machines.find(x => x.id === req.machine_id);
+  const m = FALLBACK_DB.machines.find(x => x.id === req.machine_id) || FALLBACK_DB.machines[0];
   const vcFactor = { STABLE:1.0, INTERRUPTED:0.80, UNSTABLE:0.85 }[req.stability];
 
   const out = [];
@@ -853,7 +719,7 @@ function renderCandidates() {
   const grid = document.getElementById("candidatesGrid");
   document.getElementById("candCount").textContent = `${state.candidates.length} вариантов`;
   if (!state.candidates.length) {
-    grid.innerHTML = `<div style="color:var(--muted);font-size:13px;">Нет пластин в демо-базе под выбранную комбинацию (попробуйте снять фильтр гнезда или выбрать другой материал/операцию).</div>`;
+    grid.innerHTML = `<div style="color:var(--muted);font-size:13px;">Нет пластин под выбранную комбинацию (снимите фильтр гнезда или выберите другую операцию/материал).</div>`;
     return;
   }
   grid.innerHTML = state.candidates.map(c => {
@@ -892,11 +758,52 @@ function selectCandidate(id) {
   renderSelectedDetails();
 }
 
-function renderSelectedDetails() {
+async function renderCrossReferences(insertId) {
+  const box = document.getElementById("xrefContainer");
+  let refs = [];
+  if (state.apiLive) {
+    try {
+      const r = await fetch(`${state.apiBase}/api/inserts/${encodeURIComponent(insertId)}/equivalents`);
+      if (r.ok) refs = await r.json();
+    } catch {}
+  } else {
+    const byId = Object.fromEntries(FALLBACK_DB.inserts.map(i => [i.insert_id, i]));
+    refs = (FALLBACK_DB.cross_references || [])
+      .filter(x => x.source_insert_id === insertId && byId[x.target_insert_id])
+      .map(x => ({
+        target_insert_id: x.target_insert_id,
+        target_iso_code: byId[x.target_insert_id].iso_code,
+        target_grade_code: byId[x.target_insert_id].grade_code,
+        match_type: x.match_type,
+        confidence_score: x.confidence_score,
+        notes: x.notes
+      }));
+  }
+
+  if (!refs.length) {
+    box.style.display = "none";
+    return;
+  }
+  box.style.display = "block";
+  box.innerHTML = `<div style="font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;font-size:11px;">Функциональные аналоги (Cross-Reference)</div>` +
+    refs.map(r => `
+      <div class="xref-item">
+        <div>
+          <b style="font-family:monospace;color:var(--accent)">${r.target_iso_code}</b>
+          <span style="color:var(--muted)">(${r.target_grade_code})</span>
+          <div style="color:var(--muted);font-size:11.5px;margin-top:2px;">${r.notes}</div>
+        </div>
+        <span class="tag">${Math.round(r.confidence_score * 100)}%</span>
+      </div>
+    `).join("");
+}
+
+async function renderSelectedDetails() {
   const c = state.candidates.find(x => x.insert_id === state.selectedId);
-  const m = FALLBACK_DB.machines.find(x => x.id === document.getElementById("machineSelect").value);
+  const m = FALLBACK_DB.machines.find(x => x.id === document.getElementById("machineSelect").value) || FALLBACK_DB.machines[0];
   if (!c) {
     document.getElementById("cbChart").innerHTML = `<text x="210" y="125" text-anchor="middle" fill="#64748b" font-size="13">Выберите пластину для отображения карты</text>`;
+    document.getElementById("xrefContainer").style.display = "none";
     return;
   }
   const p = c.physics;
@@ -923,6 +830,7 @@ function renderSelectedDetails() {
     wb.textContent = "✓ Режимы в оптимальном окне стружколома и в пределах лимитов станка.";
   }
   drawChipbreakerChart(c);
+  await renderCrossReferences(c.insert_id);
 }
 
 function setBar(barId, lblId, val, maxVal, unit) {
@@ -946,9 +854,8 @@ function drawChipbreakerChart(c) {
 
   const fCur = parseFloat(document.getElementById("feedSlider").value);
   const apCur = parseFloat(document.getElementById("apSlider").value);
-
   const fMax = Math.max(0.5, ...poly.map(pt => pt[0])) * 1.15;
-  const apMax = Math.max(5.0, ...poly.map(pt => pt[1])) * 1.15;
+  const apMax = Math.max(1.2, ...poly.map(pt => pt[1])) * 1.15;
   state.chartBounds = { fMin: 0, fMax, apMin: 0, apMax };
 
   const padL = 44, padR = 16, padT = 14, padB = 30;
@@ -958,14 +865,12 @@ function drawChipbreakerChart(c) {
 
   let gridSvg = "";
   for (let i = 0; i <= 4; i++) {
-    const gv = (apMax / 4) * i;
-    const y = sy(gv);
+    const gv = (apMax / 4) * i, y = sy(gv);
     gridSvg += `<line x1="${padL}" y1="${y}" x2="${padL+W}" y2="${y}" stroke="#1e2d42" stroke-dasharray="3,3"/>
                 <text x="${padL-6}" y="${y+4}" text-anchor="end" fill="#8fa3bd" font-size="10">${gv.toFixed(1)}</text>`;
   }
   for (let i = 0; i <= 5; i++) {
-    const fv = (fMax / 5) * i;
-    const x = sx(fv);
+    const fv = (fMax / 5) * i, x = sx(fv);
     gridSvg += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT+H}" stroke="#1e2d42" stroke-dasharray="3,3"/>
                 <text x="${x}" y="${padT+H+15}" text-anchor="middle" fill="#8fa3bd" font-size="10">${fv.toFixed(2)}</text>`;
   }
@@ -992,32 +897,28 @@ function drawChipbreakerChart(c) {
   `;
 }
 
-// Click on chart to move operating point interactively
 document.getElementById("cbChart").addEventListener("click", (e) => {
   if (state.op === "DRILLING") return;
-  const svg = e.currentTarget;
-  const rect = svg.getBoundingClientRect();
+  const svg = e.currentTarget, rect = svg.getBoundingClientRect();
   const xSvg = ((e.clientX - rect.left) / rect.width) * 420;
   const ySvg = ((e.clientY - rect.top) / rect.height) * 245;
   const padL = 44, padR = 16, padT = 14, padB = 30;
   const W = 420 - padL - padR, H = 245 - padT - padB;
   const f = Math.max(0.05, Math.min(state.chartBounds.fMax, ((xSvg - padL) / W) * state.chartBounds.fMax));
-  const ap = Math.max(0.2, Math.min(state.chartBounds.apMax, ((padT + H - ySvg) / H) * state.chartBounds.apMax));
+  const ap = Math.max(0.1, Math.min(state.chartBounds.apMax, ((padT + H - ySvg) / H) * state.chartBounds.apMax));
   document.getElementById("feedSlider").value = f.toFixed(2);
   document.getElementById("apSlider").value = ap.toFixed(1);
   onSliderChange();
 });
 
-// ============================================================================
-// Bootstrap
-// ============================================================================
 async function init() {
   const mSel = document.getElementById("machineSelect");
-  mSel.innerHTML = FALLBACK_DB.machines.map(m => `<option value="${m.id}">${m.name}</option>`).join("");
+  mSel.innerHTML = FALLBACK_DB.machines
+    .map(m => `<option value="${m.id}">${m.name} (${m.spindle_power_kw} кВт · ${m.max_rpm} об/мин)</option>`)
+    .join("");
   populateSubgroups();
   updateSliderLabels();
 
-  // Probe FastAPI backend
   try {
     const r = await fetch(`${state.apiBase}/api/health`, { signal: AbortSignal.timeout(1200) });
     if (r.ok) {
@@ -1038,13 +939,10 @@ async function init() {
           FALLBACK_DB.subgroups = meta.material_subgroups;
           populateSubgroups();
         }
-      } else {
-        throw new Error("Не удалось загрузить каталог станков и материалов");
       }
     }
   } catch {
     state.apiLive = false;
-    document.getElementById("connBadge").classList.remove("live");
     document.getElementById("connText").textContent = "Offline Engine (Client JS)";
   }
 

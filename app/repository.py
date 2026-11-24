@@ -3,7 +3,7 @@ Data Repository Layer (PostgreSQL via psycopg3 + In-Memory Seed Fallback).
 
 Connects to PostgreSQL when DATABASE_URL is configured and queries
 `v_insert_selector_catalog`, `material_subgroups`, `machine_profiles`,
-`holder_insert_compatibility`, and `cutting_recommendations`.
+`holder_insert_compatibility`, `cutting_recommendations`, and `insert_cross_references`.
 Falls back to an in-memory mirror of db/seed.sql if DATABASE_URL is unset.
 """
 
@@ -35,11 +35,16 @@ SEED_DATA: Dict[str, Any] = {
     "material_subgroups": [
         {"code": "P1", "iso_group": "P", "name_ru": "Нелегированные стали (Ст20, Ст45, S355)", "kc1_1_mpa": 1500.0, "mc_exponent": 0.250, "hb": "125–190 HB"},
         {"code": "P2", "iso_group": "P", "name_ru": "Низколегированные стали (40Х, 30ХГСА, 42CrMo4)", "kc1_1_mpa": 1700.0, "mc_exponent": 0.250, "hb": "180–275 HB"},
+        {"code": "P3", "iso_group": "P", "name_ru": "Высоколегированные и инструм. стали (Х12МФ, H13)", "kc1_1_mpa": 1950.0, "mc_exponent": 0.250, "hb": "250–330 HB"},
         {"code": "M1", "iso_group": "M", "name_ru": "Аустенитные нерж. (12Х18Н10Т, AISI 304/316L)", "kc1_1_mpa": 1800.0, "mc_exponent": 0.210, "hb": "150–220 HB"},
+        {"code": "M2", "iso_group": "M", "name_ru": "Дуплексные нерж. (SAF 2205, 08Х22Н6Т)", "kc1_1_mpa": 2000.0, "mc_exponent": 0.210, "hb": "220–290 HB"},
         {"code": "K1", "iso_group": "K", "name_ru": "Серый чугун (СЧ20, СЧ25, GG25)", "kc1_1_mpa": 1150.0, "mc_exponent": 0.280, "hb": "160–240 HB"},
+        {"code": "K2", "iso_group": "K", "name_ru": "Высокопрочный чугун ВЧ (ВЧ50, GGG50)", "kc1_1_mpa": 1350.0, "mc_exponent": 0.280, "hb": "180–270 HB"},
         {"code": "N1", "iso_group": "N", "name_ru": "Алюминиевые сплавы (Д16Т, АМг6, 6061-T6)", "kc1_1_mpa": 450.0, "mc_exponent": 0.250, "hb": "60–120 HB"},
+        {"code": "N2", "iso_group": "N", "name_ru": "Медь и латунь (ЛС59-1, БрАЖ9-4)", "kc1_1_mpa": 750.0, "mc_exponent": 0.240, "hb": "70–140 HB"},
+        {"code": "S1", "iso_group": "S", "name_ru": "Никелевые суперсплавы (Inconel 718, ХН77ТЮР)", "kc1_1_mpa": 2600.0, "mc_exponent": 0.240, "hb": "260–380 HB"},
         {"code": "S2", "iso_group": "S", "name_ru": "Титановые сплавы (ВТ6, Ti-6Al-4V)", "kc1_1_mpa": 1450.0, "mc_exponent": 0.230, "hb": "280–350 HB"},
-        {"code": "H1", "iso_group": "H", "name_ru": "Закалённые стали 48–58 HRC (Х12МФ, D2)", "kc1_1_mpa": 3200.0, "mc_exponent": 0.300, "hb": "48–58 HRC"},
+        {"code": "H1", "iso_group": "H", "name_ru": "Закалённые стали 48–58 HRC (Х12МФ, ШХ15, D2)", "kc1_1_mpa": 3200.0, "mc_exponent": 0.300, "hb": "48–58 HRC"},
     ],
     "machines": [
         {"id": "m1", "name": "Токарно-фрезерный центр (BMT55)", "machine_type": "TURN_MILL", "max_rpm": 4500, "spindle_power_kw": 18.5, "max_torque_nm": 320.0, "rigidity_class": "HIGH"},
@@ -47,6 +52,7 @@ SEED_DATA: Dict[str, Any] = {
         {"id": "m3", "name": "Универсальный токарный ЧПУ (лёгкий)", "machine_type": "LATHE", "max_rpm": 3000, "spindle_power_kw": 7.5, "max_torque_nm": 160.0, "rigidity_class": "LOW"},
     ],
     "inserts": [
+        # --- TURNING (10) ---
         {
             "id": "ins-1", "iso_code": "CNMG 120408", "operation_domain": "TURNING",
             "shape_code": "C", "clearance_angle_deg": 0.0, "ic_mm": 12.7, "thickness_mm": 4.76, "corner_radius_mm": 0.8,
@@ -62,6 +68,7 @@ SEED_DATA: Dict[str, Any] = {
             "recommendations": {
                 "P1": {"vc": 290.0, "vc_min": 220.0, "vc_max": 360.0, "feed": 0.30, "ap": 2.5, "coolant": "FLOOD"},
                 "P2": {"vc": 240.0, "vc_min": 180.0, "vc_max": 300.0, "feed": 0.28, "ap": 2.2, "coolant": "FLOOD"},
+                "P3": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.24, "ap": 2.0, "coolant": "FLOOD"},
                 "K1": {"vc": 260.0, "vc_min": 200.0, "vc_max": 320.0, "feed": 0.32, "ap": 2.5, "coolant": "DRY"},
             },
         },
@@ -79,9 +86,9 @@ SEED_DATA: Dict[str, Any] = {
             "holders": [{"code": "PCLNR 2525M 12", "category": "TURNING_EXTERNAL", "lead_angle_deg": 95.0, "clamping": "LEVER"}],
             "recommendations": {
                 "M1": {"vc": 165.0, "vc_min": 120.0, "vc_max": 210.0, "feed": 0.16, "ap": 1.0, "coolant": "FLOOD"},
+                "M2": {"vc": 125.0, "vc_min": 90.0, "vc_max": 160.0, "feed": 0.14, "ap": 0.8, "coolant": "HIGH_PRESSURE_THROUGH"},
                 "S2": {"vc": 55.0, "vc_min": 40.0, "vc_max": 75.0, "feed": 0.12, "ap": 0.8, "coolant": "HIGH_PRESSURE_THROUGH"},
                 "P1": {"vc": 230.0, "vc_min": 180.0, "vc_max": 280.0, "feed": 0.18, "ap": 1.2, "coolant": "FLOOD"},
-                "P2": {"vc": 195.0, "vc_min": 150.0, "vc_max": 240.0, "feed": 0.15, "ap": 1.0, "coolant": "FLOOD"},
             },
         },
         {
@@ -102,6 +109,132 @@ SEED_DATA: Dict[str, Any] = {
                 "S2": {"vc": 50.0, "vc_min": 35.0, "vc_max": 68.0, "feed": 0.10, "ap": 0.6, "coolant": "HIGH_PRESSURE_THROUGH"},
             },
         },
+        {
+            "id": "ins-7", "iso_code": "WNMG 080408", "operation_domain": "TURNING",
+            "shape_code": "W", "clearance_angle_deg": 0.0, "ic_mm": 12.7, "thickness_mm": 4.76, "corner_radius_mm": 0.8,
+            "cutting_edges_count": 6, "is_double_sided": True, "has_wiper_geometry": False,
+            "seat_pocket_signature": "W-N-1270-476-G", "relative_cost_index": 1.05,
+            "grade_code": "GEN-P25-CVD", "coating_method": "CVD", "coating_composition": "TiCN-Al2O3-TiN",
+            "toughness_index": 6, "wear_resistance_index": 8,
+            "suitability": {"P": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-PM", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.8, "ap_max_mm": 4.5, "fn_min_mm": 0.15, "fn_max_mm": 0.45,
+            "operating_zone_polygon": [[0.15, 1.0], [0.22, 0.8], [0.45, 1.2], [0.42, 4.5], [0.20, 4.0], [0.15, 2.2]],
+            "holders": [{"code": "PWLNR 2525M 08", "category": "TURNING_EXTERNAL", "lead_angle_deg": 95.0, "clamping": "LEVER"}],
+            "recommendations": {
+                "P1": {"vc": 290.0, "vc_min": 220.0, "vc_max": 360.0, "feed": 0.30, "ap": 2.5, "coolant": "FLOOD"},
+                "P2": {"vc": 240.0, "vc_min": 180.0, "vc_max": 300.0, "feed": 0.28, "ap": 2.2, "coolant": "FLOOD"},
+                "P3": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.24, "ap": 2.0, "coolant": "FLOOD"},
+                "K1": {"vc": 260.0, "vc_min": 200.0, "vc_max": 320.0, "feed": 0.32, "ap": 2.5, "coolant": "DRY"},
+            },
+        },
+        {
+            "id": "ins-8", "iso_code": "WNMG 080412", "operation_domain": "TURNING",
+            "shape_code": "W", "clearance_angle_deg": 0.0, "ic_mm": 12.7, "thickness_mm": 4.76, "corner_radius_mm": 1.2,
+            "cutting_edges_count": 6, "is_double_sided": True, "has_wiper_geometry": False,
+            "seat_pocket_signature": "W-N-1270-476-G", "relative_cost_index": 1.12,
+            "grade_code": "GEN-P35-TOUGH", "coating_method": "CVD", "coating_composition": "MT-TiCN-Al2O3",
+            "toughness_index": 8, "wear_resistance_index": 6,
+            "suitability": {"P": "PRIMARY", "M": "SECONDARY"},
+            "chipbreaker_code": "GEN-PR", "application_class": "ROUGHING", "edge_prep": "CHAMFERED_HONED",
+            "ap_min_mm": 1.5, "ap_max_mm": 6.5, "fn_min_mm": 0.25, "fn_max_mm": 0.65,
+            "operating_zone_polygon": [[0.25, 1.8], [0.35, 1.5], [0.65, 2.0], [0.58, 6.5], [0.30, 6.0], [0.25, 3.5]],
+            "holders": [{"code": "PWLNR 2525M 08", "category": "TURNING_EXTERNAL", "lead_angle_deg": 95.0, "clamping": "LEVER"}],
+            "recommendations": {
+                "P1": {"vc": 245.0, "vc_min": 180.0, "vc_max": 310.0, "feed": 0.42, "ap": 3.8, "coolant": "FLOOD"},
+                "P2": {"vc": 205.0, "vc_min": 150.0, "vc_max": 260.0, "feed": 0.38, "ap": 3.5, "coolant": "FLOOD"},
+                "M1": {"vc": 145.0, "vc_min": 110.0, "vc_max": 180.0, "feed": 0.32, "ap": 3.0, "coolant": "FLOOD"},
+            },
+        },
+        {
+            "id": "ins-9", "iso_code": "DNMG 150608", "operation_domain": "TURNING",
+            "shape_code": "D", "clearance_angle_deg": 0.0, "ic_mm": 12.7, "thickness_mm": 6.35, "corner_radius_mm": 0.8,
+            "cutting_edges_count": 4, "is_double_sided": True, "has_wiper_geometry": False,
+            "seat_pocket_signature": "D-N-1270-635-G", "relative_cost_index": 1.25,
+            "grade_code": "GEN-P25-CVD", "coating_method": "CVD", "coating_composition": "TiCN-Al2O3-TiN",
+            "toughness_index": 6, "wear_resistance_index": 8,
+            "suitability": {"P": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-PM", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.8, "ap_max_mm": 4.5, "fn_min_mm": 0.15, "fn_max_mm": 0.45,
+            "operating_zone_polygon": [[0.15, 1.0], [0.22, 0.8], [0.45, 1.2], [0.42, 4.5], [0.20, 4.0], [0.15, 2.2]],
+            "holders": [{"code": "PDJNR 2525M 15", "category": "TURNING_EXTERNAL", "lead_angle_deg": 93.0, "clamping": "LEVER"}],
+            "recommendations": {
+                "P1": {"vc": 290.0, "vc_min": 220.0, "vc_max": 360.0, "feed": 0.30, "ap": 2.5, "coolant": "FLOOD"},
+                "P2": {"vc": 240.0, "vc_min": 180.0, "vc_max": 300.0, "feed": 0.28, "ap": 2.2, "coolant": "FLOOD"},
+                "K1": {"vc": 260.0, "vc_min": 200.0, "vc_max": 320.0, "feed": 0.32, "ap": 2.5, "coolant": "DRY"},
+            },
+        },
+        {
+            "id": "ins-10", "iso_code": "VNMG 160404", "operation_domain": "TURNING",
+            "shape_code": "V", "clearance_angle_deg": 0.0, "ic_mm": 9.525, "thickness_mm": 4.76, "corner_radius_mm": 0.4,
+            "cutting_edges_count": 4, "is_double_sided": True, "has_wiper_geometry": False,
+            "seat_pocket_signature": "V-N-953-476-G", "relative_cost_index": 1.35,
+            "grade_code": "GEN-S15-PVD", "coating_method": "PVD", "coating_composition": "AlTiSiN-Nano",
+            "toughness_index": 7, "wear_resistance_index": 8,
+            "suitability": {"S": "PRIMARY", "M": "PRIMARY"},
+            "chipbreaker_code": "GEN-MF", "application_class": "FINISHING", "edge_prep": "SHARP",
+            "ap_min_mm": 0.25, "ap_max_mm": 2.0, "fn_min_mm": 0.08, "fn_max_mm": 0.25,
+            "operating_zone_polygon": [[0.08, 0.3], [0.15, 0.25], [0.25, 0.4], [0.22, 2.0], [0.10, 1.6]],
+            "holders": [{"code": "MVJNR 2525M 16", "category": "TURNING_EXTERNAL", "lead_angle_deg": 93.0, "clamping": "TOP_CLAMP"}],
+            "recommendations": {
+                "S1": {"vc": 40.0, "vc_min": 25.0, "vc_max": 55.0, "feed": 0.12, "ap": 0.8, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 65.0, "vc_min": 45.0, "vc_max": 85.0, "feed": 0.14, "ap": 1.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 175.0, "vc_min": 130.0, "vc_max": 220.0, "feed": 0.15, "ap": 1.0, "coolant": "FLOOD"},
+            },
+        },
+        {
+            "id": "ins-11", "iso_code": "SNMG 120412", "operation_domain": "TURNING",
+            "shape_code": "S", "clearance_angle_deg": 0.0, "ic_mm": 12.7, "thickness_mm": 4.76, "corner_radius_mm": 1.2,
+            "cutting_edges_count": 8, "is_double_sided": True, "has_wiper_geometry": False,
+            "seat_pocket_signature": "S-N-1270-476-G", "relative_cost_index": 1.10,
+            "grade_code": "GEN-K15-CVD", "coating_method": "CVD", "coating_composition": "Thick Al2O3-TiCN",
+            "toughness_index": 5, "wear_resistance_index": 9,
+            "suitability": {"K": "PRIMARY", "P": "SECONDARY"},
+            "chipbreaker_code": "GEN-KR", "application_class": "ROUGHING", "edge_prep": "CHAMFERED",
+            "ap_min_mm": 1.0, "ap_max_mm": 6.0, "fn_min_mm": 0.20, "fn_max_mm": 0.60,
+            "operating_zone_polygon": [[0.20, 1.0], [0.60, 1.2], [0.55, 6.0], [0.20, 5.5]],
+            "holders": [{"code": "PSBNR 2525M 12", "category": "TURNING_EXTERNAL", "lead_angle_deg": 75.0, "clamping": "LEVER"}],
+            "recommendations": {
+                "K1": {"vc": 340.0, "vc_min": 260.0, "vc_max": 420.0, "feed": 0.35, "ap": 3.0, "coolant": "DRY"},
+                "K2": {"vc": 240.0, "vc_min": 180.0, "vc_max": 300.0, "feed": 0.32, "ap": 2.8, "coolant": "FLOOD"},
+                "P1": {"vc": 270.0, "vc_min": 210.0, "vc_max": 330.0, "feed": 0.34, "ap": 3.0, "coolant": "FLOOD"},
+            },
+        },
+        {
+            "id": "ins-12", "iso_code": "DCMT 11T304", "operation_domain": "TURNING",
+            "shape_code": "D", "clearance_angle_deg": 7.0, "ic_mm": 9.525, "thickness_mm": 3.97, "corner_radius_mm": 0.4,
+            "cutting_edges_count": 2, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "D-C-953-397-T", "relative_cost_index": 0.95,
+            "grade_code": "GEN-N10-UNC", "coating_method": "UNCOATED", "coating_composition": "Polished Submicron",
+            "toughness_index": 7, "wear_resistance_index": 7,
+            "suitability": {"N": "PRIMARY"},
+            "chipbreaker_code": "GEN-MF", "application_class": "FINISHING", "edge_prep": "SHARP",
+            "ap_min_mm": 0.25, "ap_max_mm": 2.0, "fn_min_mm": 0.08, "fn_max_mm": 0.25,
+            "operating_zone_polygon": [[0.08, 0.3], [0.15, 0.25], [0.25, 0.4], [0.22, 2.0], [0.10, 1.6]],
+            "holders": [{"code": "S16Q-SDUCR 11", "category": "BORING_BAR", "lead_angle_deg": 93.0, "clamping": "SCREW"}],
+            "recommendations": {
+                "N1": {"vc": 700.0, "vc_min": 450.0, "vc_max": 1000.0, "feed": 0.18, "ap": 1.2, "coolant": "FLOOD"},
+                "N2": {"vc": 320.0, "vc_min": 220.0, "vc_max": 450.0, "feed": 0.16, "ap": 1.0, "coolant": "FLOOD"},
+            },
+        },
+        {
+            "id": "ins-13", "iso_code": "CNGA 120408", "operation_domain": "TURNING",
+            "shape_code": "C", "clearance_angle_deg": 0.0, "ic_mm": 12.7, "thickness_mm": 4.76, "corner_radius_mm": 0.8,
+            "cutting_edges_count": 4, "is_double_sided": True, "has_wiper_geometry": False,
+            "seat_pocket_signature": "C-N-1270-476-A", "relative_cost_index": 4.80,
+            "grade_code": "GEN-H10-CBN", "coating_method": "PVD", "coating_composition": "TiAlN-CBN",
+            "toughness_index": 3, "wear_resistance_index": 10,
+            "suitability": {"H": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-HCBN", "application_class": "FINISHING", "edge_prep": "CHAMFERED",
+            "ap_min_mm": 0.08, "ap_max_mm": 0.8, "fn_min_mm": 0.05, "fn_max_mm": 0.18,
+            "operating_zone_polygon": [[0.05, 0.10], [0.12, 0.08], [0.18, 0.15], [0.16, 0.80], [0.06, 0.65]],
+            "holders": [{"code": "PCLNR 2525M 12", "category": "TURNING_EXTERNAL", "lead_angle_deg": 95.0, "clamping": "LEVER"}],
+            "recommendations": {
+                "H1": {"vc": 155.0, "vc_min": 110.0, "vc_max": 200.0, "feed": 0.10, "ap": 0.25, "coolant": "DRY"},
+                "K1": {"vc": 480.0, "vc_min": 350.0, "vc_max": 620.0, "feed": 0.14, "ap": 0.40, "coolant": "DRY"},
+            },
+        },
+        # --- MILLING (4) ---
         {
             "id": "ins-4", "iso_code": "APKT 160408", "operation_domain": "MILLING",
             "shape_code": "A", "clearance_angle_deg": 11.0, "ic_mm": 9.525, "thickness_mm": 4.76, "corner_radius_mm": 0.8,
@@ -135,8 +268,47 @@ SEED_DATA: Dict[str, Any] = {
             "holders": [{"code": "SHM-AP16-D50-Z5", "category": "SHOULDER_MILL", "lead_angle_deg": 90.0, "dc_mm": 50.0, "z": 5, "clamping": "SCREW"}],
             "recommendations": {
                 "N1": {"vc": 650.0, "vc_min": 400.0, "vc_max": 900.0, "feed": 0.15, "ap": 4.0, "ae_ratio": 0.60, "coolant": "FLOOD"},
+                "N2": {"vc": 320.0, "vc_min": 220.0, "vc_max": 420.0, "feed": 0.14, "ap": 3.0, "ae_ratio": 0.55, "coolant": "FLOOD"},
             },
         },
+        {
+            "id": "ins-14", "iso_code": "SEKT 120408", "operation_domain": "MILLING",
+            "shape_code": "S", "clearance_angle_deg": 20.0, "ic_mm": 12.7, "thickness_mm": 4.76, "corner_radius_mm": 0.8,
+            "cutting_edges_count": 4, "is_double_sided": False, "has_wiper_geometry": True,
+            "seat_pocket_signature": "S-E-1270-476-T", "relative_cost_index": 1.30,
+            "grade_code": "GEN-PM30-MILL", "coating_method": "PVD", "coating_composition": "TiAlSiN",
+            "toughness_index": 8, "wear_resistance_index": 7,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-FM45", "application_class": "MEDIUM", "edge_prep": "CHAMFERED_HONED",
+            "ap_min_mm": 0.5, "ap_max_mm": 5.5, "fn_min_mm": 0.10, "fn_max_mm": 0.30,
+            "operating_zone_polygon": [[0.10, 0.5], [0.30, 0.8], [0.26, 5.5], [0.10, 5.0]],
+            "holders": [{"code": "FM45-SE12-D80-Z6", "category": "FACE_MILL", "lead_angle_deg": 45.0, "dc_mm": 80.0, "z": 6, "clamping": "SCREW"}],
+            "recommendations": {
+                "P1": {"vc": 235.0, "vc_min": 180.0, "vc_max": 290.0, "feed": 0.22, "ap": 3.0, "ae_ratio": 0.65, "coolant": "AIR_BLAST"},
+                "P2": {"vc": 200.0, "vc_min": 155.0, "vc_max": 250.0, "feed": 0.19, "ap": 2.8, "ae_ratio": 0.65, "coolant": "AIR_BLAST"},
+                "K1": {"vc": 260.0, "vc_min": 200.0, "vc_max": 320.0, "feed": 0.24, "ap": 3.5, "ae_ratio": 0.70, "coolant": "DRY"},
+                "M1": {"vc": 145.0, "vc_min": 110.0, "vc_max": 180.0, "feed": 0.16, "ap": 2.5, "ae_ratio": 0.55, "coolant": "FLOOD"},
+            },
+        },
+        {
+            "id": "ins-15", "iso_code": "RDMT 120400", "operation_domain": "MILLING",
+            "shape_code": "R", "clearance_angle_deg": 15.0, "ic_mm": 12.0, "thickness_mm": 4.76, "corner_radius_mm": 6.0,
+            "cutting_edges_count": 6, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "R-D-1200-476-T", "relative_cost_index": 1.40,
+            "grade_code": "GEN-S15-PVD", "coating_method": "PVD", "coating_composition": "AlTiSiN-Nano",
+            "toughness_index": 7, "wear_resistance_index": 8,
+            "suitability": {"S": "PRIMARY", "M": "PRIMARY"},
+            "chipbreaker_code": "GEN-RND", "application_class": "ROUGHING", "edge_prep": "HONED",
+            "ap_min_mm": 0.5, "ap_max_mm": 5.0, "fn_min_mm": 0.12, "fn_max_mm": 0.35,
+            "operating_zone_polygon": [[0.12, 0.5], [0.35, 0.8], [0.30, 5.0], [0.12, 4.5]],
+            "holders": [{"code": "CM-RD12-D50-Z4", "category": "COPY_MILL", "lead_angle_deg": 45.0, "dc_mm": 50.0, "z": 4, "clamping": "SCREW"}],
+            "recommendations": {
+                "S1": {"vc": 38.0, "vc_min": 25.0, "vc_max": 52.0, "feed": 0.20, "ap": 1.5, "ae_ratio": 0.35, "coolant": "FLOOD"},
+                "S2": {"vc": 65.0, "vc_min": 45.0, "vc_max": 85.0, "feed": 0.22, "ap": 2.0, "ae_ratio": 0.40, "coolant": "FLOOD"},
+                "M1": {"vc": 150.0, "vc_min": 110.0, "vc_max": 190.0, "feed": 0.24, "ap": 2.5, "ae_ratio": 0.50, "coolant": "FLOOD"},
+            },
+        },
+        # --- AXIAL DRILLING (3) ---
         {
             "id": "ins-6", "iso_code": "WCMX 050308", "operation_domain": "DRILLING",
             "shape_code": "W", "clearance_angle_deg": 7.0, "ic_mm": 7.938, "thickness_mm": 3.18, "corner_radius_mm": 0.8,
@@ -144,7 +316,7 @@ SEED_DATA: Dict[str, Any] = {
             "seat_pocket_signature": "W-C-794-318-X", "relative_cost_index": 1.10,
             "grade_code": "GEN-DRL-CORE", "coating_method": "PVD", "coating_composition": "TiAlN",
             "toughness_index": 9, "wear_resistance_index": 5,
-            "suitability": {"P": "PRIMARY", "M": "PRIMARY"},
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "SECONDARY"},
             "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED",
             "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.06, "fn_max_mm": 0.16,
             "operating_zone_polygon": [],
@@ -155,6 +327,55 @@ SEED_DATA: Dict[str, Any] = {
                 "M1": {"vc": 110.0, "vc_min": 80.0, "vc_max": 140.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
             },
         },
+        {
+            "id": "ins-16", "iso_code": "SPMG 07T308", "operation_domain": "DRILLING",
+            "shape_code": "S", "clearance_angle_deg": 11.0, "ic_mm": 7.938, "thickness_mm": 3.97, "corner_radius_mm": 0.8,
+            "cutting_edges_count": 4, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "S-P-794-397-G", "relative_cost_index": 1.15,
+            "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN",
+            "toughness_index": 8, "wear_resistance_index": 7,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "S": "SECONDARY"},
+            "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.06, "fn_max_mm": 0.16,
+            "operating_zone_polygon": [],
+            "holders": [{"code": "UDRL-SPMG07-D22-4D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 22.0, "z": 1, "clamping": "SCREW"}],
+            "recommendations": {
+                "P1": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 155.0, "vc_min": 115.0, "vc_max": 195.0, "feed": 0.10, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 120.0, "vc_min": 90.0, "vc_max": 150.0, "feed": 0.09, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 200.0, "vc_min": 150.0, "vc_max": 250.0, "feed": 0.14, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 50.0, "vc_min": 35.0, "vc_max": 65.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-17", "iso_code": "SPMG 090408", "operation_domain": "DRILLING",
+            "shape_code": "S", "clearance_angle_deg": 11.0, "ic_mm": 9.525, "thickness_mm": 4.76, "corner_radius_mm": 0.8,
+            "cutting_edges_count": 4, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "S-P-953-476-G", "relative_cost_index": 1.30,
+            "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN",
+            "toughness_index": 8, "wear_resistance_index": 7,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "S": "SECONDARY"},
+            "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.06, "fn_max_mm": 0.16,
+            "operating_zone_polygon": [],
+            "holders": [{"code": "UDRL-SPMG09-D32-3D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 32.0, "z": 1, "clamping": "SCREW"}],
+            "recommendations": {
+                "P1": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 155.0, "vc_min": 115.0, "vc_max": 195.0, "feed": 0.10, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 120.0, "vc_min": 90.0, "vc_max": 150.0, "feed": 0.09, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 200.0, "vc_min": 150.0, "vc_max": 250.0, "feed": 0.14, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 50.0, "vc_min": 35.0, "vc_max": 65.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+    ],
+    "cross_references": [
+        {"source_insert_id": "ins-1", "target_insert_id": "ins-7",  "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.92, "notes": "WNMG 080408 даёт 6 кромок вместо 4 при том же угле 80° (державка PWLNR)"},
+        {"source_insert_id": "ins-7", "target_insert_id": "ins-1",  "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.92, "notes": "CNMG 120408 обеспечивает большую глубину резания ap при том же угле 80°"},
+        {"source_insert_id": "ins-1", "target_insert_id": "ins-2",  "match_type": "HIGHER_TOUGHNESS",      "confidence_score": 0.88, "notes": "Та же державка PCLNR 12; переход на острую PVD-кромку и радиус 0.4"},
+        {"source_insert_id": "ins-1", "target_insert_id": "ins-13", "match_type": "HIGHER_WEAR_RESISTANCE","confidence_score": 0.85, "notes": "Та же державка PCLNR 12; переход на CBN для закалённых сталей >48 HRC"},
+        {"source_insert_id": "ins-7", "target_insert_id": "ins-8",  "match_type": "HIGHER_TOUGHNESS",      "confidence_score": 0.95, "notes": "То же гнездо PWLNR 08; усиленный черновой стружколом и сплав P35"},
+        {"source_insert_id": "ins-9", "target_insert_id": "ins-10", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.80, "notes": "Переход с 55° (DNMG) на 35° (VNMG) для сложного профилирования"},
+        {"source_insert_id": "ins-6", "target_insert_id": "ins-16", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.86, "notes": "SPMG 07T308 даёт 4 кромки вместо 3 у WCMX (корпус UDRL-SPMG07)"},
     ],
 }
 
@@ -188,10 +409,6 @@ class ToolingRepository:
     def _connect(self):
         assert self.db_url is not None and psycopg is not None
         return psycopg.connect(self.db_url, row_factory=dict_row, connect_timeout=5)
-
-    # -------------------------------------------------------------------------
-    # Public API used by app/main.py
-    # -------------------------------------------------------------------------
 
     def get_meta(self) -> Dict[str, Any]:
         if self.mode != "postgres":
@@ -316,7 +533,7 @@ class ToolingRepository:
             for m in SEED_DATA["machines"]:
                 if m["id"] == machine_id:
                     return m
-            return None
+            return SEED_DATA["machines"][0] if SEED_DATA["machines"] else None
 
         with self._connect() as conn, conn.cursor() as cur:
             if _is_valid_uuid(machine_id):
@@ -336,7 +553,6 @@ class ToolingRepository:
                     (machine_id,),
                 )
             else:
-                # Graceful fallback for legacy UI aliases like "m1"
                 cur.execute(
                     """
                     SELECT
@@ -372,7 +588,6 @@ class ToolingRepository:
             return [i for i in SEED_DATA["inserts"] if i["operation_domain"] == operation_domain]
 
         with self._connect() as conn, conn.cursor() as cur:
-            # 1. Query v_insert_selector_catalog + coating_composition from carbide_grades
             sql = """
                 SELECT
                     v.insert_id::text AS insert_id,
@@ -420,7 +635,6 @@ class ToolingRepository:
             if not view_rows:
                 return []
 
-            # Aggregate rows per insert_id (each ISO 513 suitability row produces 1 row in view)
             inserts_by_id: Dict[str, Dict[str, Any]] = {}
             pocket_signatures: set[str] = set()
             grade_ids: set[str] = set()
@@ -466,7 +680,6 @@ class ToolingRepository:
                     }
                 inserts_by_id[ins_id]["suitability"][r["iso_group"]] = r["suitability_rank"]
 
-            # 2. Fetch compatible tool holders by seat_pocket_signature
             cur.execute(
                 """
                 SELECT
@@ -490,7 +703,6 @@ class ToolingRepository:
             )
             holder_rows = cur.fetchall()
 
-            # 3. Fetch cutting recommendations for matched grades
             rec_sql = """
                 SELECT
                     grade_id::text AS grade_id,
@@ -515,7 +727,6 @@ class ToolingRepository:
             cur.execute(rec_sql, rec_params)
             rec_rows = cur.fetchall()
 
-        # Attach compatible holders (respecting allowed corner radius window)
         for ins in inserts_by_id.values():
             re_mm = ins["corner_radius_mm"]
             sig = ins["seat_pocket_signature"]
@@ -546,7 +757,6 @@ class ToolingRepository:
                 )
             ins["holders"] = matched_holders
 
-            # Attach cutting recommendations (preferring exact grade + chipbreaker match)
             recs: Dict[str, Dict[str, Any]] = {}
             for rr in rec_rows:
                 if rr["grade_id"] != ins["grade_id"]:
@@ -577,3 +787,62 @@ class ToolingRepository:
             ins["recommendations"] = recs
 
         return list(inserts_by_id.values())
+
+    def get_cross_references(self, insert_id: str) -> List[Dict[str, Any]]:
+        """Returns functional equivalents and grade upgrades for a given insert."""
+        if self.mode != "postgres":
+            by_id = {i["id"]: i for i in SEED_DATA["inserts"]}
+            out: List[Dict[str, Any]] = []
+            for xref in SEED_DATA["cross_references"]:
+                if xref["source_insert_id"] != insert_id:
+                    continue
+                target = by_id.get(xref["target_insert_id"])
+                if not target:
+                    continue
+                out.append(
+                    {
+                        "target_insert_id": target["id"],
+                        "target_iso_code": target["iso_code"],
+                        "target_grade_code": target["grade_code"],
+                        "target_seat_pocket_signature": target["seat_pocket_signature"],
+                        "match_type": xref["match_type"],
+                        "confidence_score": float(xref["confidence_score"]),
+                        "notes": xref["notes"],
+                    }
+                )
+            return out
+
+        if not _is_valid_uuid(insert_id):
+            return []
+
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    ci.id::text AS target_insert_id,
+                    ci.iso_code AS target_iso_code,
+                    cg.code AS target_grade_code,
+                    ci.seat_pocket_signature AS target_seat_pocket_signature,
+                    icr.match_type,
+                    icr.confidence_score,
+                    icr.notes
+                FROM insert_cross_references icr
+                JOIN cutting_inserts ci ON ci.id = icr.target_insert_id
+                JOIN carbide_grades cg ON cg.id = ci.grade_id
+                WHERE icr.source_insert_id = %s::uuid
+                ORDER BY icr.confidence_score DESC
+                """,
+                (insert_id,),
+            )
+            return [
+                {
+                    "target_insert_id": r["target_insert_id"],
+                    "target_iso_code": r["target_iso_code"],
+                    "target_grade_code": r["target_grade_code"],
+                    "target_seat_pocket_signature": r["target_seat_pocket_signature"],
+                    "match_type": r["match_type"],
+                    "confidence_score": float(r["confidence_score"]),
+                    "notes": r["notes"] or "",
+                }
+                for r in cur.fetchall()
+            ]

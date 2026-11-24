@@ -1,63 +1,32 @@
-# ISO Tooling Selector
+# ISO Tooling Selector (SKM)
 
 Бренд-нейтральное веб-приложение и API для подбора твердосплавных пластин (СМП) и корпусного инструмента для токарной, фрезерной и осевой обработки. Построено на стандартах **ISO 13399**, **ISO 1832**, **ISO 513** и расчётном ядре **Кинцле**.
 
-## Возможности MVP
-- **Визуальный ISO 1832 декодер:** мгновенный разбор кода (`CNMG 120408`, `CCMT 09T304`, `APKT 160408`, `WCMX 050308` и др.) на 7 сегментов, SVG-эскиз формы и расчёт канонического ключа посадочного гнезда (`seat_pocket_signature`).
-- **Интерактивная карта стружколома:** 2D-полигон рабочей зоны $(a_p / f)$ с кликабельной точкой режимов и проверкой дробления стружки.
-- **Физика резания (Кинцле):** расчёт RPM, минутной подачи $v_f$, толщины стружки $h_m$ (включая радиальное утонение при фрезеровании), силы $F_c$, MRR, мощности $P_c$ и момента $M_c$ с контролем лимитов выбранного станка.
-- **Офлайн-режим GUI:** `static/index.html` работает как с FastAPI-сервером, так и автономно в браузере без запуска бэкенда.
+## Возможности
+- **Визуальный ISO 1832 декодер:** мгновенный разбор кодов (`CNMG`, `CNGA`, `WNMG`, `DNMG`, `VNMG`, `SNMG`, `CCMT`, `DCMT`, `APKT`, `SEKT`, `RDMT`, `WCMX`, `SPMG`) на 7 сегментов, SVG-эскиз и расчёт ключа гнезда (`seat_pocket_signature`) с точным соответствием округлению PostgreSQL.
+- **Расширенный бренд-нейтральный каталог (`db/seed.sql`):** 17 пластин, 10 сплавов (CVD, PVD, Uncoated, CBN), 10 стружколомов с 2D-полигонами, 13 корпусов и 12 подгрупп материалов по всем 6 группам ISO 513 (`P, M, K, N, S, H`).
+- **Физика резания (Кинцле):** RPM, $v_f$, $h_m$ (с радиальным утонением при фрезеровании), $F_c$, MRR, мощность $P_c$ и момент $M_c$ с проверкой лимитов станка.
+- **Cross-Reference Engine:** эндпоинт `GET /api/inserts/{insert_id}/equivalents` и панель функциональных аналогов в GUI.
+- **Два режима данных:** реальный **PostgreSQL 16+ (`psycopg3`)** поверх `v_insert_selector_catalog` или встроенный автономный режим (`memory_seed` / офлайн GUI).
 
-## Структура репозитория
-
-```text
-iso-tooling-selector/
-├── app/
-│   ├── iso1832.py        # Парсер ISO 1832 и генератор ключа гнезда
-│   ├── kienzle.py        # Физическое ядро Кинцле и проверка полигона стружколома
-│   ├── repository.py     # Слой данных (PostgreSQL / встроенный seed)
-│   └── main.py           # FastAPI REST API + раздача GUI
-├── db/
-│   ├── schema.sql        # Схема PostgreSQL 16+ (ISO 13399 / 1832 / 513)
-│   └── seed.sql          # Бренд-нейтральный стартовый набор данных
-├── docs/
-│   ├── ARCHITECTURE.md   # Целевая архитектура и математика
-│   ├── INSTRUCTIONS.md   # Инженерные стандарты разработки
-│   └── ROADMAP.md        # Дорожная карта развития
-├── static/
-│   └── index.html        # Интерактивный прототип GUI
-├── tests/
-│   └── test_engine.py    # Модульные тесты парсера и физики
-├── .github/workflows/
-│   └── ci.yml            # GitHub Actions CI (pytest)
-├── requirements.txt
-├── .env.example
-└── LICENSE
-```
-
-## Быстрый старт
+## Запуск через Docker Compose (PostgreSQL + FastAPI в 1 команду)
 
 ```bash
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# Linux / macOS:
-source .venv/bin/activate
-
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+docker compose up --build
 ```
 
+Контейнер `db` автоматически накатит `db/schema.sql` и `db/seed.sql`, а приложение откроется на:
 - **GUI:** http://localhost:8000/
 - **OpenAPI / Swagger:** http://localhost:8000/docs
 
-## Подключение PostgreSQL
+## Локальный запуск (Python)
 
 ```bash
-createdb tooling_db
-psql -U postgres -d tooling_db -f db/schema.sql
-psql -U postgres -d tooling_db -f db/seed.sql
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/tooling_db"
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
+
+pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
