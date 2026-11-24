@@ -7,6 +7,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from app.geometry3d import build_iso1832_mesh, export_iso1832_stl
 from app.iso1832 import parse_iso1832
 from app.kienzle import calculate_kienzle, CuttingCalcInput
 import app.repository as repo_mod
@@ -244,10 +245,46 @@ def test_surface_roughness_and_beam_deflection():
     assert not any("L/D=5.0" in w for w in res_carbide.warnings)
 
 
+def test_geometry3d_parametric_meshes_and_stl():
+    # Negative double-sided rhombic CNMG vs positive countersunk SEKT & round RDMT
+    cnmg = build_iso1832_mesh("CNMG 120408")
+    assert cnmg.shape_code == "C"
+    assert cnmg.clearance_angle_deg == 0.0
+    assert cnmg.has_hole is True
+    assert cnmg.has_countersink is False
+    assert abs(cnmg.bbox_mm["z"] - 4.76) < 0.01
+    assert cnmg.triangle_count >= 200
+
+    sekt = build_iso1832_mesh("SEKT 120408")
+    assert sekt.clearance_angle_deg == 20.0
+    assert sekt.has_countersink is True
+    assert abs(sekt.bbox_mm["x"] - 12.7) < 0.05
+    assert abs(sekt.bbox_mm["y"] - 12.7) < 0.05
+
+    # Verify outward normals on top (+Z) and bottom (-Z) faces across positive inserts
+    for code in ("CCMT 09T304", "APKT 160408", "RDMT 120400", "WNMG 080408", "SPMG 090408"):
+        m = build_iso1832_mesh(code)
+        z_top, z_bot = m.thickness_mm / 2.0, -m.thickness_mm / 2.0
+        for t in range(m.triangle_count):
+            b = t * 9
+            zs = (m.positions[b + 2], m.positions[b + 5], m.positions[b + 8])
+            nz = m.normals[b + 2]
+            if all(abs(z - z_top) < 1e-3 for z in zs):
+                assert nz > 0.9, f"Inverted top face in {code}"
+            if all(abs(z - z_bot) < 1e-3 for z in zs):
+                assert nz < -0.9, f"Inverted bottom face in {code}"
+
+    stl = export_iso1832_stl("WNMG 080408")
+    assert stl.startswith("solid WNMG080408")
+    assert "facet normal" in stl
+    assert stl.strip().endswith("endsolid WNMG080408")
+
+
 if __name__ == "__main__":
     test_iso1832_pg_rounding_and_expanded_codes()
     test_kienzle_turning_and_milling()
     test_repository_memory_seed_and_cross_references()
     test_repository_postgres_mock_driver()
     test_surface_roughness_and_beam_deflection()
-    print("ALL EXPANDED SKM TESTS PASSED!")
+    test_geometry3d_parametric_meshes_and_stl()
+    print("ALL SKM v0.4 TESTS (INCLUDING 3D GEOMETRY & STL) PASSED!")

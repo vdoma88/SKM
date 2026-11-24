@@ -7,16 +7,18 @@ from pathlib import Path
 from typing import Optional, List, Literal, Dict, Any
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.geometry3d import build_iso1832_mesh, export_iso1832_stl, InsertMesh3D
 from app.iso1832 import parse_iso1832, ISO1832Parsed
 from app.kienzle import calculate_kienzle, CuttingCalcInput, CuttingCalcResult
 from app.repository import ToolingRepository
 
 app = FastAPI(
     title="ISO Tooling Selector API",
-    version="0.2.0",
+    version="0.5.0",
     description="Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics engine, and PostgreSQL/psycopg3 backend.",
 )
 
@@ -85,6 +87,34 @@ def serve_gui():
     return {"status": "ok", "docs": "/docs"}
 
 
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/styles.css")
+def serve_styles_css():
+    p = STATIC_DIR / "styles.css"
+    if p.exists():
+        return FileResponse(p, media_type="text/css")
+    raise HTTPException(status_code=404, detail="styles.css not found")
+
+
+@app.get("/app.js")
+def serve_app_js():
+    p = STATIC_DIR / "app.js"
+    if p.exists():
+        return FileResponse(p, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="app.js not found")
+
+
+@app.get("/viewer3d.js")
+def serve_viewer3d_js():
+    p = STATIC_DIR / "viewer3d.js"
+    if p.exists():
+        return FileResponse(p, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="viewer3d.js not found")
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "storage_mode": repo.mode}
@@ -98,6 +128,29 @@ def catalog_meta():
 @app.get("/api/iso1832/parse", response_model=ISO1832Parsed)
 def api_parse_iso1832(code: str = Query(..., description="ISO 1832 code, e.g. CNMG 120408")):
     return parse_iso1832(code)
+
+
+@app.get("/api/geometry/iso1832", response_model=InsertMesh3D)
+def api_geometry_iso1832(code: str = Query(..., description="ISO 1832 code, e.g. CNMG 120408")):
+    try:
+        return build_iso1832_mesh(code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/geometry/iso1832/stl")
+def api_geometry_iso1832_stl(code: str = Query(..., description="ISO 1832 code, e.g. CNMG 120408")):
+    try:
+        parsed = parse_iso1832(code)
+        stl_text = export_iso1832_stl(code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    filename = f"{parsed.normalized_code or 'insert'}.stl"
+    return Response(
+        content=stl_text,
+        media_type="model/stl",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/api/inserts/{insert_id}/equivalents", response_model=List[CrossRefItem])
