@@ -1023,10 +1023,28 @@ async function init() {
     if (r.ok) {
       state.apiLive = true;
       document.getElementById("connBadge").classList.add("live");
-      document.getElementById("connText").textContent = "FastAPI Live";
+      const metaRes = await fetch(`${state.apiBase}/api/catalog/meta`);
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        document.getElementById("connText").textContent =
+          meta.storage_mode === "postgres" ? "FastAPI + PostgreSQL" : "FastAPI Live";
+        if (meta.machines?.length) {
+          FALLBACK_DB.machines = meta.machines;
+          mSel.innerHTML = meta.machines
+            .map(m => `<option value="${m.id}">${m.name} (${m.spindle_power_kw} кВт · ${m.max_rpm} об/мин)</option>`)
+            .join("");
+        }
+        if (meta.material_subgroups?.length) {
+          FALLBACK_DB.subgroups = meta.material_subgroups;
+          populateSubgroups();
+        }
+      } else {
+        throw new Error("Не удалось загрузить каталог станков и материалов");
+      }
     }
   } catch {
     state.apiLive = false;
+    document.getElementById("connBadge").classList.remove("live");
     document.getElementById("connText").textContent = "Offline Engine (Client JS)";
   }
 
