@@ -21,12 +21,21 @@ from app.economics import EconomicsInput, EconomicsResult, calculate_economics
 from app.geometry3d import build_iso1832_mesh, export_iso1832_stl, InsertMesh3D
 from app.inventory import StockItem, generate_sample_stock_csv, parse_stock_csv
 from app.iso1832 import parse_iso1832, ISO1832Parsed
-from app.kienzle import calculate_kienzle, CuttingCalcInput, CuttingCalcResult
+from app.gcode import GCodeRequest, GCodeResponse, generate_gcode
+from app.kienzle import calculate_kienzle, evaluate_spindle_curve, CuttingCalcInput, CuttingCalcResult
+from app.threading import (
+    HoleFinishInput, HoleFinishResult, ThreadCalcInput, ThreadCalcResult,
+    calculate_hole_finishing, calculate_threading, list_thread_standards,
+)
 from app.repository import ToolingRepository
+from app.sales import (
+    OrderQuoteRequest, OrderQuoteResponse, SalesCatalogItem,
+    build_commercial_quote, build_sales_catalog,
+)
 
 app = FastAPI(
     title="SKM · ISO Tooling Selector API",
-    version="1.1.0",
+    version="2.1.0",
     description=(
         "Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics, "
         "Taylor tool-life economics, shop-floor warehouse stock, 3D STL/STEP geometry, "
@@ -63,7 +72,7 @@ class SelectionRequest(BaseModel):
     volume_to_remove_cm3: float = Field(80.0, gt=0)
     machine_rate_rub_hr: float = Field(3500.0, ge=0)
     # Axial drilling parameters
-    axial_subtype_filter: Optional[Literal["ALL", "INDEXABLE_U_DRILL", "MODULAR_TIP", "SOLID_CARBIDE"]] = "ALL"
+    axial_subtype_filter: Optional[Literal["ALL", "INDEXABLE_U_DRILL", "MODULAR_TIP", "SOLID_CARBIDE", "TAP_THREAD_MILL", "REAMER_FINE_BORE"]] = "ALL"
     hole_depth_mm: Optional[float] = Field(60.0, gt=0)
     hole_entry_type: Literal["FLAT", "ANGLED_OR_CURVED", "CROSS_HOLE", "STACKED"] = "FLAT"
     coolant_pressure_bar: Optional[float] = Field(20.0, ge=0)
@@ -177,7 +186,7 @@ def serve_sw():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "1.1.0", "storage_mode": repo.mode}
+    return {"status": "ok", "version": "2.1.0", "storage_mode": repo.mode}
 
 
 @app.get("/api/catalog/meta")
@@ -316,6 +325,7 @@ def api_select(req: SelectionRequest):
                 machine_max_power_kw=machine["spindle_power_kw"] if machine else None,
                 machine_max_torque_nm=machine["max_torque_nm"] if machine else None,
                 machine_max_thrust_kn=machine.get("max_thrust_kn") if machine else None,
+                machine_base_rpm=machine.get("base_rpm") if machine else None,
                 chipbreaker_polygon=ins["operating_zone_polygon"],
             )
         )
@@ -465,3 +475,101 @@ def api_export_fusion360(items: List[AssemblyExportItem]):
 @app.post("/api/export/freecad")
 def api_export_freecad(item: AssemblyExportItem):
     return build_freecad_toolbit(item)
+# -----------------------------------------------------------------------------
+# v2.0 Endpoints: Threading, Hole Finishing H7/IT6, G-Code & Spindle Curve
+# -----------------------------------------------------------------------------
+
+@app.get("/api/threading/standards")
+def api_threading_standards():
+    return list_thread_standards()
+
+
+@app.post("/api/threading/calculate", response_model=ThreadCalcResult)
+def api_threading_calculate(payload: ThreadCalcInput):
+    try:
+        return calculate_threading(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/hole-finishing/calculate", response_model=HoleFinishResult)
+def api_hole_finishing_calculate(payload: HoleFinishInput):
+    return calculate_hole_finishing(payload)
+
+
+@app.post("/api/gcode/generate", response_model=GCodeResponse)
+def api_gcode_generate(payload: GCodeRequest):
+    return generate_gcode(payload)
+
+
+class SpindleCurveRequest(BaseModel):
+    max_rpm: int = Field(12000, gt=0)
+    spindle_power_kw: float = Field(15.0, gt=0)
+    max_torque_nm: float = Field(95.0, gt=0)
+    base_rpm: Optional[int] = None
+    points: int = Field(24, ge=8, le=100)
+
+
+@app.post("/api/spindle/curve")
+def api_spindle_curve(req: SpindleCurveRequest):
+    _, _, base_rpm = evaluate_spindle_curve(
+        req.max_rpm * 0.5, req.spindle_power_kw, req.max_torque_nm, req.max_rpm, req.base_rpm
+    )
+    rpms = sorted({
+        100,
+        int(base_rpm),
+        int(req.max_rpm * 0.85),
+        req.max_rpm,
+        *[int(req.max_rpm * i / req.points) for i in range(1, req.points + 1)],
+    })
+    curve = []
+    for r in rpms:
+        if r <= 0 or r > req.max_rpm:
+            continue
+        p_kw, t_nm, _ = evaluate_spindle_curve(r, req.spindle_power_kw, req.max_torque_nm, req.max_rpm, req.base_rpm)
+        curve.append({"rpm": r, "power_kw": p_kw, "torque_nm": t_nm})
+    return {"base_rpm": base_rpm, "max_rpm": req.max_rpm, "curve": curve}
+# -----------------------------------------------------------------------------
+# v2.1 Commercial Sales & Order Endpoints
+# -----------------------------------------------------------------------------
+
+@app.get("/api/sales/catalog", response_model=List[SalesCatalogItem])
+def api_sales_catalog(
+    q: str = Query("", description="Поиск по коду, сплаву, державке или материалу"),
+    iso_group: Optional[str] = Query(None, description="P, M, K, N, S, H или ALL"),
+    operation: Optional[str] = Query(None, description="TURNING, MILLING, DRILLING, GROOVING_THREADING или ALL"),
+    application_class: Optional[str] = Query(None, description="FINISHING, MEDIUM, ROUGHING или ALL"),
+    only_in_stock: bool = Query(False),
+    pocket: Optional[str] = Query(None),
+    sort_by: Literal["relevance", "price_asc", "edge_price_asc", "stock_desc"] = Query("relevance"),
+):
+    return build_sales_catalog(
+        repo=repo,
+        q=q,
+        iso_group=iso_group,
+        operation=operation,
+        application_class=application_class,
+        only_in_stock=only_in_stock,
+        pocket=pocket,
+        sort_by=sort_by,
+    )
+
+
+@app.post("/api/sales/quote", response_model=OrderQuoteResponse)
+def api_sales_quote(payload: OrderQuoteRequest):
+    return build_commercial_quote(payload)
+
+
+@app.get("/api/sales/orders")
+def api_list_orders():
+    return repo.list_orders()
+
+
+@app.post("/api/sales/orders")
+def api_create_order(payload: Dict[str, Any] = Body(...)):
+    return repo.create_order(payload)
+
+
+@app.delete("/api/sales/orders/{order_id}")
+def api_delete_order(order_id: str):
+    return {"deleted": repo.delete_order(order_id)}

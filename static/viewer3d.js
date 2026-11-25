@@ -172,21 +172,26 @@
     const rOut = dc / 2;
     const norm = (parsed.normalized_code || "").toUpperCase();
     const isSolid = norm.startsWith("SCDRL");
-    const bodyH = isSolid ? Math.min(dc * 2.6, 36.0) : Math.max(dc * 0.65, 6.0);
+    const isTap = parsed.shape_code === "TAP";
+    const isRm = parsed.shape_code === "RM";
+    const nFlutes = isRm ? 6 : (isTap ? 3 : 2);
+    const bodyH = (isTap || isRm) ? Math.min(dc * 2.2, 34.0) : (isSolid ? Math.min(dc * 2.6, 36.0) : Math.max(dc * 0.65, 6.0));
     const pointDeg = parsed.suffix === "AL" ? 130.0 : 140.0;
-    const tipH = rOut / Math.tan((pointDeg * Math.PI) / 360);
-    const nSeg = 48, nStacks = isSolid ? 12 : 5;
-    const twistTotal = ((isSolid ? 150 : 35) * Math.PI) / 180;
+    const tipH = isTap ? rOut * 0.28 : (isRm ? rOut * 0.14 : rOut / Math.tan((pointDeg * Math.PI) / 360));
+    const nSeg = 48, nStacks = isTap ? 18 : ((isSolid || isRm) ? 12 : 5);
+    const twistTotal = ((isTap ? 90 : (isRm ? 30 : (isSolid ? 150 : 35))) * Math.PI) / 180;
     const zBase = -bodyH / 2, zShld = bodyH / 2, zApex = zShld + tipH;
 
     const ringPts = (zVal, frac) => {
       const twist = twistTotal * frac;
+      const rib = isTap ? (1.0 - 0.10 * (1.0 - Math.cos(frac * 12 * Math.PI))) : 1.0;
+      const depthF = isRm ? 0.84 : 0.72;
       const pts = [];
       for (let k = 0; k < nSeg; k++) {
         const ang = (2 * Math.PI * k) / nSeg;
-        const fp = Math.cos(2 * (ang - twist));
-        const ff = fp < 0.25 ? 0.72 + 0.28 * fp : 1.0;
-        const rad = rOut * ff;
+        const fp = Math.cos(nFlutes * (ang - twist));
+        const ff = fp < 0.25 ? depthF + (1.0 - depthF) * fp : 1.0;
+        const rad = rOut * ff * rib;
         pts.push([rad * Math.cos(ang), rad * Math.sin(ang), zVal]);
       }
       return pts;
@@ -210,7 +215,7 @@
 
     return {
       iso_code: parsed.raw_code || norm,
-      shape_code: "DRL",
+      shape_code: parsed.shape_code || "DRL",
       ic_mm: dc,
       thickness_mm: +(bodyH + tipH).toFixed(2),
       corner_radius_mm: parsed.corner_radius_mm || 0.2,
@@ -226,7 +231,7 @@
   }
 
   function buildIso1832MeshClient(parsed) {
-    if (parsed.shape_code === "DRL") return buildAxialDrillMeshClient(parsed);
+    if (["DRL", "TAP", "RM"].includes(parsed.shape_code)) return buildAxialDrillMeshClient(parsed);
     const shape = parsed.shape_code || "C";
     const ic = parsed.ic_mm || 12.7;
     const s = parsed.thickness_mm || 4.76;

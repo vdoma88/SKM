@@ -12,9 +12,12 @@ from app.economics import EconomicsInput, calculate_economics
 from app.geometry3d import build_iso1832_mesh, export_iso1832_stl
 from app.inventory import generate_sample_stock_csv, parse_stock_csv
 from app.iso1832 import parse_iso1832
-from app.kienzle import calculate_kienzle, CuttingCalcInput
+from app.gcode import GCodeRequest, generate_gcode
+from app.kienzle import calculate_kienzle, evaluate_spindle_curve, CuttingCalcInput
+from app.threading import HoleFinishInput, ThreadCalcInput, calculate_hole_finishing, calculate_threading, list_thread_standards
 import app.repository as repo_mod
 from app.repository import ToolingRepository
+from app.sales import OrderQuoteRequest, QuoteLineInput, build_commercial_quote, build_sales_catalog
 
 
 def test_iso1832_pg_rounding_and_expanded_codes():
@@ -86,10 +89,10 @@ def test_repository_memory_seed_and_cross_references():
     assert repo.mode == "memory_seed"
     meta = repo.get_meta()
     assert len(meta["material_subgroups"]) == 12
-    assert len(repo.list_inserts()) == 29
+    assert len(repo.list_inserts()) == 36
     assert len(repo.list_inserts("TURNING")) == 12
     assert len(repo.list_inserts("MILLING")) == 4
-    assert len(repo.list_inserts("DRILLING")) == 11
+    assert len(repo.list_inserts("DRILLING")) == 18
 
     xrefs = repo.get_cross_references("ins-1")
     assert len(xrefs) >= 2
@@ -354,7 +357,7 @@ def test_taylor_economics_and_warehouse_csv():
     # Warehouse CSV parsing (sample + Russian headers)
     sample_csv = generate_sample_stock_csv()
     parsed = parse_stock_csv(sample_csv)
-    assert len(parsed) == 20
+    assert len(parsed) == 27
     assert any(i.normalized_code == "CNMG120408" and i.qty == 40 for i in parsed)
 
     ru_csv = "Пластина;Сплав;Остаток;Цена;Ячейка\nWNMG 080408;GEN-P25-CVD;15;720,5;B-02\n"
@@ -474,6 +477,163 @@ def test_axial_tooling_suite_physics_parser_and_3d():
     assert stl_mod.strip().endswith("endsolid MODDRL200")
 
 
+def test_spindle_power_torque_curve():
+    # BT40 15kW / 95Nm / 12000 RPM -> base speed ~= 1508 RPM
+    p_lo, m_lo, n_base = evaluate_spindle_curve(500, 15.0, 95.0, 12000)
+    assert 1480 <= n_base <= 1530
+    assert m_lo == 95.0
+    assert p_lo < 5.5  # Power is torque-limited below base speed!
+
+    p_mid, m_mid, _ = evaluate_spindle_curve(4000, 15.0, 95.0, 12000)
+    assert p_mid == 15.0
+    assert m_mid < 40.0
+
+    p_hi, _, _ = evaluate_spindle_curve(12000, 15.0, 95.0, 12000)
+    assert p_hi < 15.0  # High-speed field-weakening taper
+
+    # Verify calculate_kienzle warns when required power exceeds LOW-RPM available power on the curve
+    res = calculate_kienzle(
+        CuttingCalcInput(
+            operation_domain="DRILLING",
+            kc1_1_mpa=1700.0,
+            mc_exponent=0.25,
+            vc_m_min=60.0,
+            feed_mm=0.20,
+            diameter_mm=40.0,  # ~477 RPM -> BT40 only has ~4.7 kW!
+            axial_tool_subtype="INDEXABLE_U_DRILL",
+            machine_max_rpm=12000,
+            machine_max_power_kw=15.0,
+            machine_max_torque_nm=95.0,
+        )
+    )
+    assert res.available_power_kw is not None and res.available_power_kw < 6.0
+    assert any("кривой шпинделя" in w for w in res.warnings)
+
+
+def test_threading_taps_forming_and_helical_mill():
+    assert len(list_thread_standards()) >= 30
+
+    r_cut = calculate_threading(ThreadCalcInput(thread_code="M12", iso_group="P", method="CUT_TAP", hole_type="BLIND", thread_depth_mm=24.0))
+    assert r_cut.pre_drill_mm == 10.20
+    assert r_cut.min_drill_depth_mm > 28.0
+    assert r_cut.estimated_torque_nm > 1.0
+
+    r_form = calculate_threading(ThreadCalcInput(thread_code="M10", iso_group="N", method="FORM_TAP", hole_type="THROUGH"))
+    assert r_form.pre_drill_mm == 9.30
+    assert r_form.pre_drill_mm > 8.50  # Forming tap requires larger pre-drill than cutting tap
+
+    r_tm = calculate_threading(ThreadCalcInput(thread_code="G1/2", iso_group="M", method="THREAD_MILL", radial_passes=2))
+    assert r_tm.pre_drill_mm == 19.0
+    assert r_tm.vf_centerline_mm_min is not None
+    assert r_tm.vf_centerline_mm_min < r_tm.vf_mm_min  # Internal helical centerline feed reduction
+
+    r_npt = calculate_threading(ThreadCalcInput(thread_code="NPT 1/2", iso_group="P", method="FORM_TAP"))
+    assert any("раскатники не применяются" in w for w in r_npt.warnings)
+
+
+def test_hole_finishing_h7_it6_and_3d_tap_reamer():
+    rm = calculate_hole_finishing(HoleFinishInput(target_diameter_mm=20.0, tolerance_grade="H7", hole_depth_mm=50.0, method="REAMING"))
+    assert rm.upper_dev_um == 21.0
+    assert rm.pre_drill_opt_mm == 19.75
+    assert "G85" in rm.recommended_cycle
+
+    fb = calculate_hole_finishing(HoleFinishInput(target_diameter_mm=30.0, tolerance_grade="IT6", hole_depth_mm=210.0, method="FINE_BORING"))
+    assert fb.upper_dev_um < 21.0
+    assert fb.expected_ra_um < 0.6
+    assert any("антивибрационная" in w for w in fb.warnings)
+
+    for code, exp_sig in (
+        ("TAP-M12-BL", "TAP-T-1200-100-I"),
+        ("FORM-M8", "TAP-F-800-100-I"),
+        ("TM-M16", "TAP-T-1600-100-I"),
+        ("REAM-H7-100", "RM-R-1000-700-I"),
+        ("FBORE-MIC-25", "RM-B-2500-700-I"),
+    ):
+        p = parse_iso1832(code)
+        assert p.valid is True and p.seat_pocket_signature == exp_sig
+        m = build_iso1832_mesh(code)
+        assert m.triangle_count >= 1000
+    stl_tap = export_iso1832_stl("TAP-M12-BL")
+    assert stl_tap.startswith("solid TAPM12BL")
+
+
+def test_cnc_gcode_generator_fanuc_and_siemens():
+    g_pilot = generate_gcode(GCodeRequest(controller="FANUC", operation="DRILLING", diameter_mm=12.0, depth_mm=90.0, rpm=2800, vf_mm_min=616, pilot_required=True))
+    assert "S350 M03" in g_pilot.program_text
+    assert "M88" in g_pilot.program_text
+
+    g_tap_s = generate_gcode(GCodeRequest(controller="SIEMENS", operation="TAPPING", diameter_mm=12.0, depth_mm=24.0, pitch_mm=1.75, rpm=424, vf_mm_min=742))
+    assert "CYCLE84(" in g_tap_s.program_text
+
+    g_tm_f = generate_gcode(GCodeRequest(controller="FANUC", operation="THREAD_MILLING", diameter_mm=16.0, cutter_dc_mm=10.0, depth_mm=20.0, pitch_mm=2.0, rpm=3500, vf_mm_min=260))
+    assert "G91 G03" in g_tm_f.program_text
+
+    g_bore_f = generate_gcode(GCodeRequest(controller="FANUC", operation="FINE_BORING", diameter_mm=25.0, depth_mm=40.0, rpm=2600, vf_mm_min=210))
+    assert "G98 G76" in g_bore_f.program_text
+
+    g_turn_s = generate_gcode(GCodeRequest(controller="SIEMENS", operation="TURNING", diameter_mm=50.0, ap_mm=2.0, depth_mm=40.0, vc_m_min=290, rpm=1846, feed_mm=0.3))
+    assert "G96 S290 LIMS=1846" in g_turn_s.program_text
+
+
+def test_sales_catalog_search_filters_pricing_and_upsell():
+    repo = ToolingRepository(db_url="")
+    all_items = build_sales_catalog(repo)
+    assert len(all_items) == 36
+
+    # Russian alloy/material synonym search ("нержавейка" -> M group, "д16т" -> N group)
+    ss_items = build_sales_catalog(repo, q="нержавейка", only_in_stock=True)
+    assert len(ss_items) >= 5
+    assert all(i.in_stock for i in ss_items)
+
+    al_items = build_sales_catalog(repo, q="Д16Т")
+    assert len(al_items) >= 3
+    assert any("AL" in i.iso_code or i.iso_code == "DCMT 11T304" for i in al_items)
+
+    # Price-per-edge sorting for Steel turning puts multi-edge economical inserts on top
+    p_turn = build_sales_catalog(repo, iso_group="P", operation="TURNING", sort_by="edge_price_asc")
+    assert len(p_turn) >= 5
+    assert p_turn[0].price_per_edge_rub <= p_turn[-1].price_per_edge_rub
+    # Standard turning inserts sell in 10-pc boxes, solid drills/taps sell by 1 pc
+    assert p_turn[0].pack_qty == 10
+    assert p_turn[0].holder_code is not None and p_turn[0].holder_upsell_price_rub > 0
+
+    tap_items = build_sales_catalog(repo, q="метчик")
+    assert len(tap_items) >= 3
+    assert all(t.pack_qty == 1 for t in tap_items)
+
+
+def test_commercial_quote_vat_discount_and_orders_crud():
+    q = build_commercial_quote(
+        OrderQuoteRequest(
+            customer_name="ООО ПромСнаб",
+            customer_inn="0274123456",
+            discount_pct=10.0,
+            include_vat_20=True,
+            comment="Отгрузка ТК Деловые Линии",
+            lines=[
+                QuoteLineInput(code="WNMG 080408", description="Сталь, 6 кр.", qty=20, unit_price_rub=690.0, stock_qty=60, pack_qty=10),
+                QuoteLineInput(item_type="HOLDER", code="PWLNR 2525M 08", description="Державка", qty=1, unit_price_rub=4800.0, stock_qty=5, pack_qty=1),
+                QuoteLineInput(code="CNGA 120408", description="CBN", qty=10, unit_price_rub=3120.0, stock_qty=0, pack_qty=10),
+            ],
+        )
+    )
+    assert q.total_positions == 3
+    assert q.total_units == 31
+    assert q.subtotal_rub == 49800.0
+    assert q.discount_rub == 4980.0
+    assert q.total_rub == 44820.0
+    assert q.vat_rub == 7470.0
+    assert q.in_stock_lines_count == 2
+    assert q.backorder_lines_count == 1
+    assert "ООО ПромСнаб" in q.messenger_text
+    assert "НДС 20%" in q.messenger_text
+
+    repo = ToolingRepository(db_url="")
+    saved = repo.create_order({"quoteNumber": q.quote_number, "total": q.total_rub})
+    assert len(repo.list_orders()) == 1
+    assert repo.delete_order(saved["id"]) is True
+
+
 if __name__ == "__main__":
     test_iso1832_pg_rounding_and_expanded_codes()
     test_kienzle_turning_and_milling()
@@ -485,4 +645,10 @@ if __name__ == "__main__":
     test_taylor_economics_and_warehouse_csv()
     test_cam_exporters_gtc_fusion360_freecad()
     test_axial_tooling_suite_physics_parser_and_3d()
-    print("ALL SKM v1.1 TESTS (10 SUITES, INCLUDING AXIAL TOOLING) PASSED!")
+    test_spindle_power_torque_curve()
+    test_threading_taps_forming_and_helical_mill()
+    test_hole_finishing_h7_it6_and_3d_tap_reamer()
+    test_cnc_gcode_generator_fanuc_and_siemens()
+    test_sales_catalog_search_filters_pricing_and_upsell()
+    test_commercial_quote_vat_discount_and_orders_crud()
+    print("ALL SKM v2.1 SALES EDITION TESTS (16 SUITES) PASSED!")

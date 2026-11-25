@@ -241,22 +241,29 @@ def _build_axial_drill_mesh(parsed: ISO1832Parsed) -> InsertMesh3D:
     point_deg = 130.0 if (parsed.suffix == "AL") else 140.0
     tip_h = r_outer / math.tan(math.radians(point_deg / 2.0))
 
+    is_tap = parsed.shape_code == "TAP"
+    is_rm = parsed.shape_code == "RM"
+    n_flutes = 6 if is_rm else (3 if is_tap else 2)
     n_seg = 48
-    n_stacks = 12 if is_solid else 5
-    twist_total = math.radians(150.0 if is_solid else 35.0)
+    n_stacks = 18 if is_tap else (12 if (is_solid or is_rm) else 5)
+    if is_tap or is_rm:
+        body_h = min(dc * 2.2, 34.0)
+        tip_h = r_outer * (0.28 if is_tap else 0.14)
+    twist_total = math.radians(90.0 if is_tap else (30.0 if is_rm else (150.0 if is_solid else 35.0)))
     z_base = -body_h / 2.0
     z_shld = body_h / 2.0
     z_apex = z_shld + tip_h
 
     def ring_pts(z_val: float, frac: float, radius_scale: float = 1.0) -> List[Tuple[float, float, float]]:
         twist = twist_total * frac
+        thread_rib = (1.0 - 0.10 * (1.0 - math.cos(frac * 12.0 * math.pi))) if is_tap else 1.0
         pts: List[Tuple[float, float, float]] = []
         for k in range(n_seg):
             ang = 2.0 * math.pi * k / n_seg
-            # 2-flute radial profile: deep smooth chip flutes at 0 and pi
-            flute_phase = math.cos(2.0 * (ang - twist))
-            flute_factor = 0.72 + 0.28 * flute_phase if flute_phase < 0.25 else 1.0
-            rad = r_outer * radius_scale * flute_factor
+            flute_phase = math.cos(n_flutes * (ang - twist))
+            depth_f = 0.84 if is_rm else 0.72
+            flute_factor = depth_f + (1.0 - depth_f) * flute_phase if flute_phase < 0.25 else 1.0
+            rad = r_outer * radius_scale * flute_factor * thread_rib
             pts.append((rad * math.cos(ang), rad * math.sin(ang), z_val))
         return pts
 
@@ -298,7 +305,7 @@ def _build_axial_drill_mesh(parsed: ISO1832Parsed) -> InsertMesh3D:
     return InsertMesh3D(
         iso_code=parsed.raw_code,
         normalized_code=parsed.normalized_code,
-        shape_code="DRL",
+        shape_code=parsed.shape_code or "DRL",
         ic_mm=dc,
         thickness_mm=round(body_h + tip_h, 2),
         corner_radius_mm=parsed.corner_radius_mm or 0.2,
@@ -320,7 +327,7 @@ def build_iso1832_mesh(code: str) -> InsertMesh3D:
     if not parsed.valid:
         raise ValueError(parsed.error or f"Некорректный код ISO 1832: {code}")
 
-    if parsed.shape_code == "DRL":
+    if parsed.shape_code in ("DRL", "TAP", "RM"):
         return _build_axial_drill_mesh(parsed)
 
     ic = parsed.ic_mm or 12.7

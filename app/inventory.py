@@ -44,6 +44,13 @@ DEFAULT_STOCK_ITEMS: List[Dict[str, Any]] = [
     {"iso_code": "MOD-DRL-200", "grade_code": "GEN-DRL-UNIV", "qty": 4, "unit_price_rub": 3180.0, "bin_location": "D-02-2", "supplier": "Склад-Осевой"},
     {"iso_code": "SC-DRL-080-5D", "grade_code": "GEN-PM30-MILL", "qty": 8, "unit_price_rub": 2750.0, "bin_location": "D-03-1", "supplier": "Склад-Осевой"},
     {"iso_code": "SC-DRL-120-8D", "grade_code": "GEN-DRL-UNIV", "qty": 5, "unit_price_rub": 4150.0, "bin_location": "D-03-2", "supplier": "Склад-Осевой"},
+    {"iso_code": "TAP-M12-BL", "grade_code": "GEN-PM30-MILL", "qty": 10, "unit_price_rub": 1850.0, "bin_location": "F-01-1", "supplier": "Склад-Резьба"},
+    {"iso_code": "TAP-M10-TH", "grade_code": "GEN-PM30-MILL", "qty": 12, "unit_price_rub": 1520.0, "bin_location": "F-01-2", "supplier": "Склад-Резьба"},
+    {"iso_code": "FORM-M8", "grade_code": "GEN-N10-UNC", "qty": 8, "unit_price_rub": 1780.0, "bin_location": "F-01-3", "supplier": "Склад-Резьба"},
+    {"iso_code": "TM-M16", "grade_code": "GEN-S15-PVD", "qty": 4, "unit_price_rub": 3950.0, "bin_location": "F-02-1", "supplier": "Склад-Резьба"},
+    {"iso_code": "REAM-H7-100", "grade_code": "GEN-DRL-UNIV", "qty": 6, "unit_price_rub": 2890.0, "bin_location": "G-01-1", "supplier": "Склад-Точные"},
+    {"iso_code": "REAM-H7-200", "grade_code": "GEN-DRL-UNIV", "qty": 3, "unit_price_rub": 4200.0, "bin_location": "G-01-2", "supplier": "Склад-Точные"},
+    {"iso_code": "FBORE-MIC-25", "grade_code": "GEN-M25-PVD", "qty": 2, "unit_price_rub": 3450.0, "bin_location": "G-02-1", "supplier": "Склад-Точные"},
 ]
 
 

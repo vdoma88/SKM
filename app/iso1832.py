@@ -24,6 +24,8 @@ SHAPES: Dict[str, Dict[str, Any]] = {
     "O": {"name": "Восьмиугольник 135°", "angle_deg": 135, "edges_single": 8, "ic_factor": 2.414},
     "L": {"name": "Прямоугольник 90°", "angle_deg": 90, "edges_single": 2, "ic_factor": 0.600},
     "DRL": {"name": "Осевое сверло (2-зубое)", "angle_deg": 140, "edges_single": 2, "ic_factor": 1.000},
+    "TAP": {"name": "Метчик / Резьбофреза", "angle_deg": 60, "edges_single": 4, "ic_factor": 1.000},
+    "RM":  {"name": "Развёртка H7 / Чист. расточка", "angle_deg": 90, "edges_single": 6, "ic_factor": 1.000},
 }
 
 CLEARANCE_ANGLES: Dict[str, Dict[str, Any]] = {
@@ -262,6 +264,78 @@ def _parse_special_grooving_threading(raw: str, core: str, suffix: Optional[str]
                 ISO1832Segment(position=4, label="Глубина / Серия", code=tag, meaning=f"До {int(ld_val)}xD (Lраб≈{flute_len} мм)", color="#FBBF24"),
                 ISO1832Segment(position=5, label="Угол при верш.", code=f"{int(point_deg)}°", meaning="Полированная алюминиевая" if tag == "AL" else "Усиленная кромка (S-перемычка)", color="#34D399"),
                 ISO1832Segment(position=6, label="Хвостовик", code="DIN6535", meaning="Цилиндрический HA под гидро/термопатрон", color="#2DD4BF"),
+            ],
+        )
+
+
+    # Cutting Tap / Forming Tap / Thread Mill: TAP-M10, TAP-M12-BL, FORM-M8, TM-M16, TM-G12
+    m_tap = re.match(r"^(TAP|FORM|TM)([MG])(\d{1,2})(BL|TH|P\d+)?$", core_nodash)
+    if m_tap:
+        kind, fam, sz_str, opt = m_tap.groups()
+        sz_num = int(sz_str)
+        dc_mm = 20.95 if (fam == "G" and sz_num == 12) else float(sz_num)
+        kind_ru = {"TAP": "Режущий метчик", "FORM": "Раскатник (бесструж.)", "TM": "ЦТ резьбофреза"}[kind]
+        thk_mm = round(dc_mm * 1.8, 2)
+        pocket = f"TAP-{kind[0]}-{_round_half_up_x100(dc_mm)}-100-I"
+        return ISO1832Parsed(
+            raw_code=raw,
+            normalized_code=core_nodash,
+            valid=True,
+            shape_code="TAP",
+            shape_name=f"{kind_ru} {fam}{sz_str}" + (" (глух.)" if opt == "BL" else (" (сквозн.)" if opt == "TH" else "")),
+            clearance_angle_code="P",
+            clearance_angle_deg=11.0,
+            tolerance_class="G",
+            fixing_type_code="N",
+            ic_mm=dc_mm,
+            cutting_edge_length_mm=round(dc_mm * 2.2, 1),
+            thickness_mm=thk_mm,
+            corner_radius_mm=0.1,
+            is_double_sided=False,
+            cutting_edges_count=4 if kind == "TM" else 3,
+            suffix=opt or kind,
+            seat_pocket_signature=pocket,
+            segments=[
+                ISO1832Segment(position=1, label="Инструмент", code=kind, meaning=kind_ru, color="#38BDF8"),
+                ISO1832Segment(position=2, label="Стандарт", code=fam, meaning="Метрическая 60°" if fam == "M" else "Трубная BSPP 55°", color="#A78BFA"),
+                ISO1832Segment(position=3, label="Номинал", code=sz_str, meaning=f"Ø{dc_mm:g} мм", color="#FB7185"),
+                ISO1832Segment(position=4, label="Исполнение", code=opt or "UNIV", meaning="Спираль 40° (глухие)" if opt == "BL" else ("Винт. подточка (сквоз.)" if opt == "TH" else "Универсальное"), color="#34D399"),
+                ISO1832Segment(position=5, label="Цикл ЧПУ", code="G84" if kind != "TM" else "G03", meaning="Жёсткое нарезание" if kind != "TM" else "Винтовая интерполяция", color="#FBBF24"),
+            ],
+        )
+
+    # Carbide Reamer H7 & Micrometric Fine Boring Head: REAM-H7-100, REAM-H7-200, FBORE-MIC-25, FBORE-MIC-50
+    m_rm = re.match(r"^(REAMH7|FBOREMIC)(\d{2,3})$", core_nodash)
+    if m_rm:
+        kind, d_str = m_rm.groups()
+        is_ream = kind == "REAMH7"
+        dc_mm = round(int(d_str) / 10.0, 2) if is_ream else float(int(d_str))
+        edges = 6 if is_ream else 1
+        pocket = f"RM-{'R' if is_ream else 'B'}-{_round_half_up_x100(dc_mm)}-700-I"
+        return ISO1832Parsed(
+            raw_code=raw,
+            normalized_code=core_nodash,
+            valid=True,
+            shape_code="RM",
+            shape_name=f"ЦТ развёртка Ø{dc_mm:g} H7 (Z=6)" if is_ream else f"Микрометр. расточная головка Ø{dc_mm:g} (IT6)",
+            clearance_angle_code="P",
+            clearance_angle_deg=11.0,
+            tolerance_class="H",
+            fixing_type_code="N",
+            ic_mm=dc_mm,
+            cutting_edge_length_mm=round(dc_mm * 2.5, 1),
+            thickness_mm=round(dc_mm * 1.5, 1),
+            corner_radius_mm=0.2 if is_ream else 0.4,
+            is_double_sided=False,
+            cutting_edges_count=edges,
+            suffix="H7" if is_ream else "IT6",
+            seat_pocket_signature=pocket,
+            segments=[
+                ISO1832Segment(position=1, label="Класс", code="REAM" if is_ream else "FBORE", meaning="ЦТ развёртка (Z=6)" if is_ream else "Чистовая расточная головка", color="#38BDF8"),
+                ISO1832Segment(position=2, label="Квалитет", code="H7" if is_ream else "IT6", meaning="Точность H7 (Ra 0.8)" if is_ream else "Микрометр 0.002 мм (IT6)", color="#A78BFA"),
+                ISO1832Segment(position=3, label="Диаметр (DC)", code=d_str, meaning=f"Ø{dc_mm:g} мм", color="#FB7185"),
+                ISO1832Segment(position=4, label="Патрон", code="HYD" if is_ream else "MIC", meaning="Гидропатрон (<0.005)" if is_ream else "Микрометрич. нониус", color="#FBBF24"),
+                ISO1832Segment(position=5, label="Цикл ЧПУ", code="G85" if is_ream else "G76", meaning="Вход и выход на F" if is_ream else "Ориентация M19 + отвод Q", color="#34D399"),
             ],
         )
 

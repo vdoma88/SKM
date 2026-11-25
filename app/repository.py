@@ -49,9 +49,9 @@ SEED_DATA: Dict[str, Any] = {
         {"code": "H1", "iso_group": "H", "name_ru": "Закалённые стали 48–58 HRC (Х12МФ, ШХ15, D2)", "kc1_1_mpa": 3200.0, "mc_exponent": 0.300, "hb": "48–58 HRC"},
     ],
     "machines": [
-        {"id": "m1", "name": "Токарно-фрезерный центр (BMT55)", "machine_type": "TURN_MILL", "max_rpm": 4500, "spindle_power_kw": 18.5, "max_torque_nm": 320.0, "coolant_pressure_bar": 20.0, "max_thrust_kn": 28.0, "rigidity_class": "HIGH"},
-        {"id": "m2", "name": "Вертикальный фрезерный ОЦ (BT40)", "machine_type": "MILL_3AX", "max_rpm": 12000, "spindle_power_kw": 15.0, "max_torque_nm": 95.0, "coolant_pressure_bar": 25.0, "max_thrust_kn": 20.0, "rigidity_class": "MEDIUM"},
-        {"id": "m3", "name": "Универсальный токарный ЧПУ (лёгкий)", "machine_type": "LATHE", "max_rpm": 3000, "spindle_power_kw": 7.5, "max_torque_nm": 160.0, "coolant_pressure_bar": 10.0, "max_thrust_kn": 12.0, "rigidity_class": "LOW"},
+        {"id": "m1", "name": "Токарно-фрезерный центр (BMT55)", "machine_type": "TURN_MILL", "max_rpm": 4500, "spindle_power_kw": 18.5, "max_torque_nm": 320.0, "base_rpm": 550, "coolant_pressure_bar": 20.0, "max_thrust_kn": 28.0, "rigidity_class": "HIGH"},
+        {"id": "m2", "name": "Вертикальный фрезерный ОЦ (BT40)", "machine_type": "MILL_3AX", "max_rpm": 12000, "spindle_power_kw": 15.0, "max_torque_nm": 95.0, "base_rpm": 1500, "coolant_pressure_bar": 25.0, "max_thrust_kn": 20.0, "rigidity_class": "MEDIUM"},
+        {"id": "m3", "name": "Универсальный токарный ЧПУ (лёгкий)", "machine_type": "LATHE", "max_rpm": 3000, "spindle_power_kw": 7.5, "max_torque_nm": 160.0, "base_rpm": 450, "coolant_pressure_bar": 10.0, "max_thrust_kn": 12.0, "rigidity_class": "LOW"},
     ],
     "inserts": [
         # --- TURNING (10) ---
@@ -612,6 +612,149 @@ SEED_DATA: Dict[str, Any] = {
                 "M1": {"vc": 62.0, "vc_min": 45.0, "vc_max": 82.0, "feed": 0.13, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
             },
         },
+        # --- TAPS, THREAD MILLS, H7 REAMERS & MICROMETRIC FINE BORING (7 new tools) ---
+        {
+            "id": "ins-30", "iso_code": "TAP-M12-BL", "operation_domain": "DRILLING",
+            "shape_code": "TAP", "clearance_angle_deg": 11.0, "ic_mm": 12.0, "thickness_mm": 1.0, "corner_radius_mm": 0.1,
+            "cutting_edges_count": 3, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "TAP-T-1200-100-I", "relative_cost_index": 2.90,
+            "grade_code": "GEN-PM30-MILL", "coating_method": "PVD", "coating_composition": "TiAlSiN",
+            "toughness_index": 9, "wear_resistance_index": 7,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-TAP-TM", "application_class": "FINISHING", "edge_prep": "SHARP",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 1.75, "fn_max_mm": 1.75,
+            "operating_zone_polygon": [],
+            "axial_subtype": "TAP_THREAD_MILL", "point_angle_deg": 140.0, "ld_ratio_max": 2.5, "tolerance_hole": "6H",
+            "holders": [{"code": "SYNCHRO-TAP-M12", "category": "TAP_HOLDER", "lead_angle_deg": 90.0, "dc_mm": 12.0, "z": 3, "ld_ratio_max": 2.5, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "P1": {"vc": 16.0, "vc_min": 10.0, "vc_max": 22.0, "feed": 1.75, "ap": 0.0, "coolant": "FLOOD"},
+                "P2": {"vc": 13.0, "vc_min": 8.0, "vc_max": 18.0, "feed": 1.75, "ap": 0.0, "coolant": "FLOOD"},
+                "M1": {"vc": 9.0, "vc_min": 6.0, "vc_max": 13.0, "feed": 1.75, "ap": 0.0, "coolant": "FLOOD"},
+                "K1": {"vc": 18.0, "vc_min": 12.0, "vc_max": 25.0, "feed": 1.75, "ap": 0.0, "coolant": "FLOOD"},
+            },
+        },
+        {
+            "id": "ins-31", "iso_code": "TAP-M10-TH", "operation_domain": "DRILLING",
+            "shape_code": "TAP", "clearance_angle_deg": 11.0, "ic_mm": 10.0, "thickness_mm": 1.0, "corner_radius_mm": 0.1,
+            "cutting_edges_count": 3, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "TAP-T-1000-100-I", "relative_cost_index": 2.40,
+            "grade_code": "GEN-PM30-MILL", "coating_method": "PVD", "coating_composition": "TiAlSiN",
+            "toughness_index": 9, "wear_resistance_index": 7,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-TAP-TM", "application_class": "FINISHING", "edge_prep": "SHARP",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 1.50, "fn_max_mm": 1.50,
+            "operating_zone_polygon": [],
+            "axial_subtype": "TAP_THREAD_MILL", "point_angle_deg": 140.0, "ld_ratio_max": 3.0, "tolerance_hole": "6H",
+            "holders": [{"code": "SYNCHRO-TAP-M10", "category": "TAP_HOLDER", "lead_angle_deg": 90.0, "dc_mm": 10.0, "z": 3, "ld_ratio_max": 3.0, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "P1": {"vc": 18.0, "vc_min": 12.0, "vc_max": 24.0, "feed": 1.50, "ap": 0.0, "coolant": "FLOOD"},
+                "P2": {"vc": 14.0, "vc_min": 9.0, "vc_max": 19.0, "feed": 1.50, "ap": 0.0, "coolant": "FLOOD"},
+                "M1": {"vc": 10.0, "vc_min": 6.0, "vc_max": 14.0, "feed": 1.50, "ap": 0.0, "coolant": "FLOOD"},
+                "K1": {"vc": 20.0, "vc_min": 14.0, "vc_max": 26.0, "feed": 1.50, "ap": 0.0, "coolant": "FLOOD"},
+            },
+        },
+        {
+            "id": "ins-32", "iso_code": "FORM-M8", "operation_domain": "DRILLING",
+            "shape_code": "TAP", "clearance_angle_deg": 11.0, "ic_mm": 8.0, "thickness_mm": 1.0, "corner_radius_mm": 0.1,
+            "cutting_edges_count": 4, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "TAP-F-800-100-I", "relative_cost_index": 2.75,
+            "grade_code": "GEN-N10-UNC", "coating_method": "UNCOATED", "coating_composition": "Polished Submicron",
+            "toughness_index": 9, "wear_resistance_index": 8,
+            "suitability": {"N": "PRIMARY", "P": "SECONDARY", "M": "SECONDARY"},
+            "chipbreaker_code": "GEN-TAP-TM", "application_class": "FINISHING", "edge_prep": "HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 1.25, "fn_max_mm": 1.25,
+            "operating_zone_polygon": [],
+            "axial_subtype": "TAP_THREAD_MILL", "point_angle_deg": 140.0, "ld_ratio_max": 3.0, "tolerance_hole": "6H",
+            "holders": [{"code": "SYNCHRO-FORM-M8", "category": "TAP_HOLDER", "lead_angle_deg": 90.0, "dc_mm": 8.0, "z": 4, "ld_ratio_max": 3.0, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "N1": {"vc": 42.0, "vc_min": 25.0, "vc_max": 60.0, "feed": 1.25, "ap": 0.0, "coolant": "FLOOD"},
+                "P1": {"vc": 24.0, "vc_min": 16.0, "vc_max": 32.0, "feed": 1.25, "ap": 0.0, "coolant": "FLOOD"},
+                "M1": {"vc": 14.0, "vc_min": 9.0, "vc_max": 20.0, "feed": 1.25, "ap": 0.0, "coolant": "FLOOD"},
+            },
+        },
+        {
+            "id": "ins-33", "iso_code": "TM-M16", "operation_domain": "DRILLING",
+            "shape_code": "TAP", "clearance_angle_deg": 11.0, "ic_mm": 16.0, "thickness_mm": 1.0, "corner_radius_mm": 0.1,
+            "cutting_edges_count": 4, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "TAP-T-1600-100-I", "relative_cost_index": 5.80,
+            "grade_code": "GEN-S15-PVD", "coating_method": "PVD", "coating_composition": "AlTiSiN-Nano",
+            "toughness_index": 8, "wear_resistance_index": 9,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "S": "PRIMARY", "H": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-TAP-TM", "application_class": "FINISHING", "edge_prep": "SHARP",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.12, "fn_max_mm": 0.30,
+            "operating_zone_polygon": [],
+            "axial_subtype": "TAP_THREAD_MILL", "point_angle_deg": 140.0, "ld_ratio_max": 2.5, "tolerance_hole": "6H",
+            "holders": [{"code": "HYD-TM-D12-M16", "category": "TAP_HOLDER", "lead_angle_deg": 90.0, "dc_mm": 16.0, "z": 4, "ld_ratio_max": 2.5, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "P1": {"vc": 110.0, "vc_min": 80.0, "vc_max": 145.0, "feed": 0.20, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 65.0, "vc_min": 45.0, "vc_max": 85.0, "feed": 0.16, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S1": {"vc": 32.0, "vc_min": 22.0, "vc_max": 45.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "H1": {"vc": 45.0, "vc_min": 30.0, "vc_max": 60.0, "feed": 0.12, "ap": 0.0, "coolant": "AIR_BLAST"},
+            },
+        },
+        {
+            "id": "ins-34", "iso_code": "REAM-H7-100", "operation_domain": "DRILLING",
+            "shape_code": "RM", "clearance_angle_deg": 11.0, "ic_mm": 10.0, "thickness_mm": 7.0, "corner_radius_mm": 0.2,
+            "cutting_edges_count": 6, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "RM-R-1000-700-I", "relative_cost_index": 4.40,
+            "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN",
+            "toughness_index": 8, "wear_resistance_index": 9,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "N": "SECONDARY"},
+            "chipbreaker_code": "GEN-REAM-H7", "application_class": "FINISHING", "edge_prep": "SHARP",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.18, "fn_max_mm": 0.45,
+            "operating_zone_polygon": [],
+            "axial_subtype": "REAMER_FINE_BORE", "point_angle_deg": 140.0, "ld_ratio_max": 5.0, "tolerance_hole": "H7",
+            "holders": [{"code": "HYD-REAM-D10-H7", "category": "REAMER_CHUCK", "lead_angle_deg": 90.0, "dc_mm": 10.0, "z": 6, "ld_ratio_max": 5.0, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "P1": {"vc": 95.0, "vc_min": 65.0, "vc_max": 130.0, "feed": 0.36, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 80.0, "vc_min": 55.0, "vc_max": 110.0, "feed": 0.30, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 55.0, "vc_min": 35.0, "vc_max": 75.0, "feed": 0.24, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 110.0, "vc_min": 75.0, "vc_max": 145.0, "feed": 0.40, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "N1": {"vc": 180.0, "vc_min": 120.0, "vc_max": 240.0, "feed": 0.42, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-35", "iso_code": "REAM-H7-200", "operation_domain": "DRILLING",
+            "shape_code": "RM", "clearance_angle_deg": 11.0, "ic_mm": 20.0, "thickness_mm": 7.0, "corner_radius_mm": 0.2,
+            "cutting_edges_count": 6, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "RM-R-2000-700-I", "relative_cost_index": 6.20,
+            "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN",
+            "toughness_index": 8, "wear_resistance_index": 9,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "N": "SECONDARY"},
+            "chipbreaker_code": "GEN-REAM-H7", "application_class": "FINISHING", "edge_prep": "SHARP",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.20, "fn_max_mm": 0.50,
+            "operating_zone_polygon": [],
+            "axial_subtype": "REAMER_FINE_BORE", "point_angle_deg": 140.0, "ld_ratio_max": 5.0, "tolerance_hole": "H7",
+            "holders": [{"code": "HYD-REAM-D20-H7", "category": "REAMER_CHUCK", "lead_angle_deg": 90.0, "dc_mm": 20.0, "z": 6, "ld_ratio_max": 5.0, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "P1": {"vc": 95.0, "vc_min": 65.0, "vc_max": 130.0, "feed": 0.42, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 80.0, "vc_min": 55.0, "vc_max": 110.0, "feed": 0.36, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 55.0, "vc_min": 35.0, "vc_max": 75.0, "feed": 0.28, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 110.0, "vc_min": 75.0, "vc_max": 145.0, "feed": 0.48, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "N1": {"vc": 180.0, "vc_min": 120.0, "vc_max": 240.0, "feed": 0.50, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-36", "iso_code": "FBORE-MIC-25", "operation_domain": "DRILLING",
+            "shape_code": "RM", "clearance_angle_deg": 11.0, "ic_mm": 25.0, "thickness_mm": 7.0, "corner_radius_mm": 0.4,
+            "cutting_edges_count": 1, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "RM-B-2500-700-I", "relative_cost_index": 5.10,
+            "grade_code": "GEN-M25-PVD", "coating_method": "PVD", "coating_composition": "AlTiN",
+            "toughness_index": 8, "wear_resistance_index": 8,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "N": "SECONDARY", "S": "PRIMARY", "H": "SECONDARY"},
+            "chipbreaker_code": "GEN-REAM-H7", "application_class": "FINISHING", "edge_prep": "SHARP",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.05, "fn_max_mm": 0.14,
+            "operating_zone_polygon": [],
+            "axial_subtype": "REAMER_FINE_BORE", "point_angle_deg": 140.0, "ld_ratio_max": 6.0, "tolerance_hole": "IT6",
+            "holders": [{"code": "MIC-BORE-D25-42", "category": "FINE_BORING_HEAD", "lead_angle_deg": 90.0, "dc_mm": 25.0, "z": 1, "ld_ratio_max": 6.0, "clamping": "CARTRIDGE"}],
+            "recommendations": {
+                "P1": {"vc": 210.0, "vc_min": 150.0, "vc_max": 270.0, "feed": 0.10, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 135.0, "vc_min": 95.0, "vc_max": 175.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 240.0, "vc_min": 170.0, "vc_max": 310.0, "feed": 0.12, "ap": 0.0, "coolant": "DRY"},
+                "N1": {"vc": 450.0, "vc_min": 300.0, "vc_max": 650.0, "feed": 0.10, "ap": 0.0, "coolant": "FLOOD"},
+                "S2": {"vc": 48.0, "vc_min": 32.0, "vc_max": 65.0, "feed": 0.07, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
     ],
     "cross_references": [
         {"source_insert_id": "ins-1", "target_insert_id": "ins-7",  "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.92, "notes": "WNMG 080408 даёт 6 кромок вместо 4 при том же угле 80° (державка PWLNR)"},
@@ -627,6 +770,8 @@ SEED_DATA: Dict[str, Any] = {
         {"source_insert_id": "ins-6",  "target_insert_id": "ins-23", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.88, "notes": "WCMT 06T308 позволяет сверлить до 5xD вместо 3xD (корпус UDRL-WCMT06-D30-5D)"},
         {"source_insert_id": "ins-24", "target_insert_id": "ins-27", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.86, "notes": "Переход со сменной коронки Ø14 на монолит Ø12 8xD для точности IT8 и глубоких отверстий"},
         {"source_insert_id": "ins-25", "target_insert_id": "ins-16", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.82, "notes": "Альтернатива Ø20–22 мм: U-сверло SPMG 07T308 дешевле на кромку при глубине до 4xD"},
+        {"source_insert_id": "ins-30", "target_insert_id": "ins-33", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.90, "notes": "Резьбофреза TM-M16 исключает риск застревания метчика в дорогой детали и подходит под S/H"},
+        {"source_insert_id": "ins-35", "target_insert_id": "ins-36", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.88, "notes": "Микрометрическая головка FBORE-MIC-25 исправляет биение оси и даёт квалитет IT6"},
     ],
 }
 
@@ -662,6 +807,7 @@ class ToolingRepository:
         ]
         self._custom_machines: List[Dict[str, Any]] = []
         self._saved_assemblies: List[Dict[str, Any]] = []
+        self._saved_orders: List[Dict[str, Any]] = []
 
     def _connect(self):
         assert self.db_url is not None and psycopg is not None
@@ -1265,3 +1411,15 @@ class ToolingRepository:
         before = len(self._saved_assemblies)
         self._saved_assemblies = [a for a in self._saved_assemblies if a["id"] != assembly_id]
         return len(self._saved_assemblies) < before
+    def list_orders(self) -> List[Dict[str, Any]]:
+        return list(self._saved_orders)
+
+    def create_order(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        rec = {"id": f"ord-{uuid4().hex[:8]}", **payload}
+        self._saved_orders.insert(0, rec)
+        return rec
+
+    def delete_order(self, order_id: str) -> bool:
+        before = len(self._saved_orders)
+        self._saved_orders = [o for o in self._saved_orders if o.get("id") != order_id]
+        return len(self._saved_orders) < before

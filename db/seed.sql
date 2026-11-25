@@ -115,7 +115,13 @@ INSERT INTO chipbreakers (id, manufacturer_id, code, operation_domain, applicati
  'Монолитная 2-зубая геометрия 140° со спиральной канавкой 30° и двойной ленточкой (IT8)'),
 ('20000000-0000-0000-0000-000000000014', '00000000-0000-0000-0000-000000000001', 'GEN-DRL-AL',  'DRILLING', 'ALUMINUM_SHARP', 'SHARP',           25.0, 0.00, 0.00, 0.12, 0.38,
  '[[0.12, 0.0], [0.38, 0.0]]'::jsonb,
- 'Полированная канавка 130° для алюминия и цветных металлов без наростообразования');
+ 'Полированная канавка 130° для алюминия и цветных металлов без наростообразования'),
+('20000000-0000-0000-0000-000000000015', '00000000-0000-0000-0000-000000000001', 'GEN-TAP-TM',  'DRILLING', 'FINISHING', 'SHARP', 10.0, 0.00, 0.00, 0.50, 3.00,
+ '[[0.50, 0.0], [3.00, 0.0]]'::jsonb,
+ 'Резьбонарезная геометрия 60°/55° (метчики, раскатники и резьбофрезы)'),
+('20000000-0000-0000-0000-000000000016', '00000000-0000-0000-0000-000000000001', 'GEN-REAM-H7', 'DRILLING', 'FINISHING', 'SHARP',  6.0, 0.00, 0.00, 0.05, 0.45,
+ '[[0.05, 0.0], [0.45, 0.0]]'::jsonb,
+ 'Чистовая геометрия развёрток H7 и микрометрических расточных головок IT6');
 
 -- 7. Cutting Inserts (17 inserts: 10 Turning, 4 Milling, 3 Axial Drilling)
 INSERT INTO cutting_inserts (
@@ -330,7 +336,57 @@ INSERT INTO cutting_inserts (
  '10000000-0000-0000-0000-000000000008', '20000000-0000-0000-0000-000000000013',
  'SC-DRL-060-H', 'DRILLING', 'DRL', 'S', 11, 'H', 'I',
  6.000, 37.200, 5.000, 0.100, 2, FALSE, FALSE, 'R',
- '{"axial_subtype": "SOLID_CARBIDE", "point_angle_deg": 140, "ld_max": 5.0, "tolerance_hole": "IT8"}'::jsonb, 4.90);
+ '{"axial_subtype": "SOLID_CARBIDE", "point_angle_deg": 140, "ld_max": 5.0, "tolerance_hole": "IT8"}'::jsonb, 4.90),
+
+-- === THREADING (TAPS & THREAD MILLS) + PRECISION FINISHING (REAMERS H7 / FINE BORING IT6) ===
+-- 30. TAP-M12-BL (Spiral flute cutting tap M12, blind holes)
+('30000000-0000-0000-0000-000000000030', '00000000-0000-0000-0000-000000000001',
+ '10000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000015',
+ 'TAP-M12-BL', 'DRILLING', 'TAP', 'T', 11, 'G', 'I',
+ 12.000, 26.400, 1.000, 0.100, 3, FALSE, FALSE, 'R',
+ '{"axial_subtype": "TAP_THREAD_MILL", "thread": "M12", "pitch": 1.75, "hole_type": "BLIND", "ld_max": 2.5, "tolerance_hole": "6H"}'::jsonb, 2.90),
+
+-- 31. TAP-M10-TH (Spiral point cutting tap M10, through holes)
+('30000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-000000000001',
+ '10000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000015',
+ 'TAP-M10-TH', 'DRILLING', 'TAP', 'T', 11, 'G', 'I',
+ 10.000, 22.000, 1.000, 0.100, 3, FALSE, FALSE, 'R',
+ '{"axial_subtype": "TAP_THREAD_MILL", "thread": "M10", "pitch": 1.50, "hole_type": "THROUGH", "ld_max": 3.0, "tolerance_hole": "6H"}'::jsonb, 2.40),
+
+-- 32. FORM-M8 (Roll forming tap M8 for ductile P/M/N)
+('30000000-0000-0000-0000-000000000032', '00000000-0000-0000-0000-000000000001',
+ '10000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000015',
+ 'FORM-M8', 'DRILLING', 'TAP', 'F', 11, 'G', 'I',
+ 8.000, 17.600, 1.000, 0.100, 4, FALSE, FALSE, 'R',
+ '{"axial_subtype": "TAP_THREAD_MILL", "thread": "M8", "pitch": 1.25, "method": "FORM_TAP", "ld_max": 3.0, "tolerance_hole": "6H"}'::jsonb, 2.75),
+
+-- 33. TM-M16 (Solid carbide helical thread mill for M16..M24 / S / H / P / M)
+('30000000-0000-0000-0000-000000000033', '00000000-0000-0000-0000-000000000001',
+ '10000000-0000-0000-0000-000000000008', '20000000-0000-0000-0000-000000000015',
+ 'TM-M16', 'DRILLING', 'TAP', 'T', 11, 'G', 'I',
+ 16.000, 35.200, 1.000, 0.100, 4, FALSE, FALSE, 'R',
+ '{"axial_subtype": "TAP_THREAD_MILL", "thread": "M16", "pitch": 2.00, "method": "THREAD_MILL", "ld_max": 2.5, "tolerance_hole": "6H"}'::jsonb, 5.80),
+
+-- 34. REAM-H7-100 (Solid carbide 6-flute H7 reamer D10)
+('30000000-0000-0000-0000-000000000034', '00000000-0000-0000-0000-000000000001',
+ '10000000-0000-0000-0000-000000000010', '20000000-0000-0000-0000-000000000016',
+ 'REAM-H7-100', 'DRILLING', 'RM', 'R', 11, 'H', 'I',
+ 10.000, 25.000, 7.000, 0.200, 6, FALSE, FALSE, 'R',
+ '{"axial_subtype": "REAMER_FINE_BORE", "ld_max": 5.0, "tolerance_hole": "H7"}'::jsonb, 4.40),
+
+-- 35. REAM-H7-200 (Solid carbide 6-flute H7 reamer D20)
+('30000000-0000-0000-0000-000000000035', '00000000-0000-0000-0000-000000000001',
+ '10000000-0000-0000-0000-000000000010', '20000000-0000-0000-0000-000000000016',
+ 'REAM-H7-200', 'DRILLING', 'RM', 'R', 11, 'H', 'I',
+ 20.000, 50.000, 7.000, 0.200, 6, FALSE, FALSE, 'R',
+ '{"axial_subtype": "REAMER_FINE_BORE", "ld_max": 5.0, "tolerance_hole": "H7"}'::jsonb, 6.20),
+
+-- 36. FBORE-MIC-25 (Micrometric fine boring head D25..42, IT6, 0.002 mm/div)
+('30000000-0000-0000-0000-000000000036', '00000000-0000-0000-0000-000000000001',
+ '10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000016',
+ 'FBORE-MIC-25', 'DRILLING', 'RM', 'B', 11, 'H', 'I',
+ 25.000, 62.500, 7.000, 0.400, 1, FALSE, FALSE, 'R',
+ '{"axial_subtype": "REAMER_FINE_BORE", "ld_max": 6.0, "tolerance_hole": "IT6"}'::jsonb, 5.10);
 
 -- 8. Tool Holders & Bodies (13 holders)
 INSERT INTO tool_holders (
@@ -432,7 +488,35 @@ INSERT INTO tool_holders (
 
 ('40000000-0000-0000-0000-000000000024', '00000000-0000-0000-0000-000000000001',
  'SHRINK-FIT-D06-5D', 'SOLID_CARBIDE_DRILL', 'INTEGRAL', NULL, 6.0, 2, NULL, 32.0, 5.0, TRUE, 'R',
- '{"type": "SHRINK_FIT_HA", "d_mm": 6}'::jsonb);
+ '{"type": "SHRINK_FIT_HA", "d_mm": 6}'::jsonb),
+
+('40000000-0000-0000-0000-000000000025', '00000000-0000-0000-0000-000000000001',
+ 'SYNCHRO-TAP-M12', 'TAP_HOLDER', 'INTEGRAL', NULL, 12.0, 3, NULL, 35.0, 2.5, TRUE, 'R',
+ '{"type": "SYNCHRO_ER25", "d_mm": 9}'::jsonb),
+
+('40000000-0000-0000-0000-000000000026', '00000000-0000-0000-0000-000000000001',
+ 'SYNCHRO-TAP-M10', 'TAP_HOLDER', 'INTEGRAL', NULL, 10.0, 3, NULL, 32.0, 3.0, TRUE, 'R',
+ '{"type": "SYNCHRO_ER25", "d_mm": 10}'::jsonb),
+
+('40000000-0000-0000-0000-000000000027', '00000000-0000-0000-0000-000000000001',
+ 'SYNCHRO-FORM-M8', 'TAP_HOLDER', 'INTEGRAL', NULL, 8.0, 4, NULL, 28.0, 3.0, TRUE, 'R',
+ '{"type": "SYNCHRO_ER20", "d_mm": 8}'::jsonb),
+
+('40000000-0000-0000-0000-000000000028', '00000000-0000-0000-0000-000000000001',
+ 'HYD-TM-D12-M16', 'TAP_HOLDER', 'INTEGRAL', NULL, 16.0, 4, NULL, 40.0, 2.5, TRUE, 'R',
+ '{"type": "HYDRAULIC_HA", "d_mm": 12}'::jsonb),
+
+('40000000-0000-0000-0000-000000000029', '00000000-0000-0000-0000-000000000001',
+ 'HYD-REAM-D10-H7', 'REAMER_CHUCK', 'INTEGRAL', NULL, 10.0, 6, NULL, 50.0, 5.0, TRUE, 'R',
+ '{"type": "HYDRAULIC_HA", "d_mm": 10}'::jsonb),
+
+('40000000-0000-0000-0000-000000000030', '00000000-0000-0000-0000-000000000001',
+ 'HYD-REAM-D20-H7', 'REAMER_CHUCK', 'INTEGRAL', NULL, 20.0, 6, NULL, 100.0, 5.0, TRUE, 'R',
+ '{"type": "HYDRAULIC_HA", "d_mm": 20}'::jsonb),
+
+('40000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-000000000001',
+ 'MIC-BORE-D25-42', 'FINE_BORING_HEAD', 'CARTRIDGE', 90.0, 25.0, 1, 25.0, 150.0, 6.0, TRUE, 'R',
+ '{"type": "BT40_MODULAR", "step_mm": 0.002}'::jsonb);
 
 -- 9. Holder-to-Insert Pocket Compatibility (Verified exact PostgreSQL signatures)
 INSERT INTO holder_insert_compatibility (holder_id, seat_pocket_signature, seat_position, inserts_required_qty, allowed_radius_min_mm, allowed_radius_max_mm, spare_screw_code) VALUES
@@ -465,7 +549,14 @@ INSERT INTO holder_insert_compatibility (holder_id, seat_pocket_signature, seat_
 ('40000000-0000-0000-0000-000000000021', 'DRL-S-800-500-I',  'MAIN', 1, 0.0, 0.5, NULL),
 ('40000000-0000-0000-0000-000000000022', 'DRL-S-1200-800-I', 'MAIN', 1, 0.0, 0.5, NULL),
 ('40000000-0000-0000-0000-000000000023', 'DRL-S-1000-500-I', 'MAIN', 1, 0.0, 0.5, NULL),
-('40000000-0000-0000-0000-000000000024', 'DRL-S-600-500-I',  'MAIN', 1, 0.0, 0.5, NULL);
+('40000000-0000-0000-0000-000000000024', 'DRL-S-600-500-I',  'MAIN', 1, 0.0, 0.5, NULL),
+('40000000-0000-0000-0000-000000000025', 'TAP-T-1200-100-I', 'MAIN', 1, 0.0, 0.5, NULL),
+('40000000-0000-0000-0000-000000000026', 'TAP-T-1000-100-I', 'MAIN', 1, 0.0, 0.5, NULL),
+('40000000-0000-0000-0000-000000000027', 'TAP-F-800-100-I',  'MAIN', 1, 0.0, 0.5, NULL),
+('40000000-0000-0000-0000-000000000028', 'TAP-T-1600-100-I', 'MAIN', 1, 0.0, 0.5, NULL),
+('40000000-0000-0000-0000-000000000029', 'RM-R-1000-700-I',  'MAIN', 1, 0.0, 0.5, NULL),
+('40000000-0000-0000-0000-000000000030', 'RM-R-2000-700-I',  'MAIN', 1, 0.0, 0.5, NULL),
+('40000000-0000-0000-0000-000000000031', 'RM-B-2500-700-I',  'MAIN', 1, 0.0, 0.8, 'CARTRIDGE-CC06');
 
 -- 10. Cutting Data Recommendations (All ISO 513 groups)
 INSERT INTO cutting_recommendations (

@@ -43,7 +43,7 @@ class CuttingCalcInput(BaseModel):
     shank_material: Literal["STEEL", "CARBIDE", "DAMPED"] = "STEEL"
     # Axial drilling engineering parameters
     hole_depth_mm: Optional[float] = Field(None, gt=0)
-    axial_tool_subtype: Optional[Literal["INDEXABLE_U_DRILL", "MODULAR_TIP", "SOLID_CARBIDE"]] = None
+    axial_tool_subtype: Optional[Literal["INDEXABLE_U_DRILL", "MODULAR_TIP", "SOLID_CARBIDE", "TAP_THREAD_MILL", "REAMER_FINE_BORE"]] = None
     point_angle_deg: float = Field(140.0, gt=90.0, le=180.0)
     drill_ld_max: Optional[float] = Field(None, gt=0)
     hole_entry_type: Literal["FLAT", "ANGLED_OR_CURVED", "CROSS_HOLE", "STACKED"] = "FLAT"
@@ -53,6 +53,7 @@ class CuttingCalcInput(BaseModel):
     machine_max_power_kw: Optional[float] = None
     machine_max_torque_nm: Optional[float] = None
     machine_max_thrust_kn: Optional[float] = None
+    machine_base_rpm: Optional[int] = None
     # Optional chipbreaker polygon [[fn, ap], ...]
     chipbreaker_polygon: Optional[List[List[float]]] = None
 
@@ -68,6 +69,9 @@ class CuttingCalcResult(BaseModel):
     power_net_kw: float
     power_motor_kw: float
     torque_nm: float
+    available_power_kw: Optional[float] = None
+    available_torque_nm: Optional[float] = None
+    spindle_base_rpm: Optional[float] = None
     chip_thinning_factor: float
     ra_um: Optional[float] = None
     ld_ratio: Optional[float] = None
@@ -82,6 +86,38 @@ class CuttingCalcResult(BaseModel):
     hole_cycle_time_sec: Optional[float] = None
     in_chipbreaker_zone: Optional[bool] = None
     warnings: List[str] = []
+
+
+def evaluate_spindle_curve(
+    rpm: float,
+    max_power_kw: float,
+    max_torque_nm: float,
+    max_rpm: int,
+    base_rpm_override: Optional[int] = None,
+) -> tuple[float, float, float]:
+    """
+    Evaluates real CNC spindle characteristic curve P(n) and M(n) at operating RPM:
+    - Constant-torque region (n <= n_base): M(n) = M_max, P(n) = M_max * n / 9550
+    - Constant-power region (n_base < n <= 0.85*n_max): P(n) = P_max, M(n) = 9550 * P_max / n
+    - High-speed field-weakening region (n > 0.85*n_max): slight power taper down to 0.82*P_max
+    Returns (available_power_kw, available_torque_nm, base_rpm).
+    """
+    rpm_safe = max(float(rpm), 1.0)
+    n_base = float(base_rpm_override) if base_rpm_override else (9550.0 * max_power_kw) / max(max_torque_nm, 1.0)
+    n_base = max(100.0, min(n_base, float(max_rpm) * 0.7))
+
+    if rpm_safe <= n_base:
+        avail_torque = max_torque_nm
+        avail_power = (avail_torque * rpm_safe) / 9550.0
+    else:
+        derate_start = float(max_rpm) * 0.85
+        if rpm_safe > derate_start and max_rpm > derate_start:
+            frac = min(1.0, (rpm_safe - derate_start) / max(float(max_rpm) - derate_start, 1.0))
+            avail_power = max_power_kw * (1.0 - 0.18 * frac)
+        else:
+            avail_power = max_power_kw
+        avail_torque = (9550.0 * avail_power) / rpm_safe
+    return round(avail_power, 2), round(avail_torque, 1), round(n_base, 0)
 
 
 def point_in_polygon(x: float, y: float, polygon: List[List[float]]) -> bool:
@@ -160,23 +196,40 @@ def calculate_kienzle(inp: CuttingCalcInput) -> CuttingCalcResult:
         subtype = inp.axial_tool_subtype or "INDEXABLE_U_DRILL"
         sin_half_point = max(math.sin(math.radians(inp.point_angle_deg / 2.0)), 0.5)
         if subtype == "INDEXABLE_U_DRILL":
-            # U-drill: 1 effective edge per radius (center + peripheral offset), flat ~180° entry
             hm = max(inp.feed_mm * 0.5 * sin_kapr, 0.01)
             kc = inp.kc1_1_mpa * (hm ** (-inp.mc_exponent))
-            # Axial thrust force Ff (N) for U-drill (no chisel web, balanced inserts)
             thrust_raw = 0.42 * kc * inp.feed_mm * inp.diameter_mm
+            vf = inp.feed_mm * rpm_clamped
+            mrr = (math.pi * (inp.diameter_mm ** 2) / 4.0 * vf) / 1000.0
+            power_net = (inp.feed_mm * inp.diameter_mm * effective_vc * kc) / 240_000.0
+        elif subtype == "REAMER_FINE_BORE":
+            # Light finishing allowance (~0.15 mm radial) -> much lower thrust & power than full drilling
+            hm = max(inp.feed_mm / max(inp.teeth_count, 2), 0.015)
+            kc = inp.kc1_1_mpa * (hm ** (-inp.mc_exponent))
+            radial_ap = 0.15
+            thrust_raw = 0.18 * kc * radial_ap * inp.feed_mm
+            vf = inp.feed_mm * rpm_clamped
+            mrr = (math.pi * inp.diameter_mm * radial_ap * vf) / 1000.0
+            power_net = (radial_ap * inp.feed_mm * effective_vc * kc) / 60_000.0
+        elif subtype == "TAP_THREAD_MILL":
+            # Threading/tapping uses pitch-controlled engagement with very low axial thrust
+            hm = max(inp.feed_mm * 0.12, 0.02)
+            kc = inp.kc1_1_mpa * (hm ** (-inp.mc_exponent))
+            thrust_raw = 0.10 * kc * inp.feed_mm * inp.diameter_mm * 0.25
+            vf = inp.feed_mm * rpm_clamped
+            mrr = (math.pi * inp.diameter_mm * 0.55 * inp.feed_mm * vf) / 1000.0
+            power_net = (inp.kc1_1_mpa * inp.diameter_mm * (inp.feed_mm ** 1.6) * rpm_clamped) / 220_000_000.0 * 9.55
+            power_net = max(power_net, 0.08)
         else:
-            # 2-flute solid carbide / modular crown: fz = fn / 2, chip thickness = (fn/2) * sin(sigma/2)
             hm = max((inp.feed_mm / 2.0) * sin_half_point, 0.01)
             kc = inp.kc1_1_mpa * (hm ** (-inp.mc_exponent))
-            # Includes chisel-edge thrust contribution (~35-45% of total axial force)
             thrust_factor = 0.50 if subtype == "MODULAR_TIP" else 0.54
             thrust_raw = thrust_factor * kc * inp.feed_mm * inp.diameter_mm * sin_half_point
+            vf = inp.feed_mm * rpm_clamped
+            mrr = (math.pi * (inp.diameter_mm ** 2) / 4.0 * vf) / 1000.0
+            power_net = (inp.feed_mm * inp.diameter_mm * effective_vc * kc) / 240_000.0
 
         axial_thrust_n = round(thrust_raw, 1)
-        vf = inp.feed_mm * rpm_clamped
-        mrr = (math.pi * (inp.diameter_mm ** 2) / 4.0 * vf) / 1000.0
-        power_net = (inp.feed_mm * inp.diameter_mm * effective_vc * kc) / 240_000.0
         fc = (power_net * 60000.0) / max(effective_vc, 0.1)
 
         # Hole depth, L/D ratio, coolant pressure & G-code strategy
@@ -209,8 +262,18 @@ def calculate_kienzle(inp: CuttingCalcInput) -> CuttingCalcResult:
         elif subtype == "INDEXABLE_U_DRILL" and inp.hole_entry_type == "ANGLED_OR_CURVED":
             pilot_hole_required = True
 
-        # Recommended CNC drilling cycle
-        if subtype == "INDEXABLE_U_DRILL":
+        # Recommended CNC drilling / axial cycle
+        if subtype == "TAP_THREAD_MILL":
+            recommended_cycle = "G84 (жёсткое M29) / G02-G03 резьбофрез."
+            pilot_hole_required = False
+            req_bar = 15.0
+            required_coolant_bar = 15.0
+        elif subtype == "REAMER_FINE_BORE":
+            recommended_cycle = "G85 (развёртка) / G76 (расточка M19+Q)"
+            pilot_hole_required = False
+            req_bar = 15.0
+            required_coolant_bar = 15.0
+        elif subtype == "INDEXABLE_U_DRILL":
             if inp.hole_entry_type != "FLAT":
                 recommended_cycle = "G81 (сниж. f на входе/выходе, БЕЗ G83!)"
             else:
@@ -290,19 +353,31 @@ def calculate_kienzle(inp: CuttingCalcInput) -> CuttingCalcResult:
     elif inp.operation_domain == "DRILLING":
         ld_ratio = drill_ld_ratio
 
-    # 5. Machine limits check
-    if inp.machine_max_power_kw and power_motor > inp.machine_max_power_kw:
-        warnings.append(
-            f"Требуемая мощность ({power_motor:.2f} кВт) превышает мощность станка ({inp.machine_max_power_kw:.1f} кВт)."
-        )
-    elif inp.machine_max_power_kw and power_motor > inp.machine_max_power_kw * 0.85:
-        warnings.append(
-            f"Нагрузка по мощности выше 85% ({power_motor:.2f} / {inp.machine_max_power_kw:.1f} кВт)."
+    # 5. Machine limits check against real spindle P(n) / M(n) characteristic curve
+    avail_power: Optional[float] = inp.machine_max_power_kw
+    avail_torque: Optional[float] = inp.machine_max_torque_nm
+    spindle_base_rpm: Optional[float] = None
+    if inp.machine_max_power_kw and inp.machine_max_torque_nm and inp.machine_max_rpm:
+        avail_power, avail_torque, spindle_base_rpm = evaluate_spindle_curve(
+            rpm_clamped,
+            inp.machine_max_power_kw,
+            inp.machine_max_torque_nm,
+            inp.machine_max_rpm,
+            inp.machine_base_rpm,
         )
 
-    if inp.machine_max_torque_nm and torque_nm > inp.machine_max_torque_nm:
+    if avail_power and power_motor > avail_power:
         warnings.append(
-            f"Крутящий момент ({torque_nm:.1f} Н·м) превышает лимит станка ({inp.machine_max_torque_nm:.1f} Н·м)."
+            f"Требуемая мощность ({power_motor:.2f} кВт) превышает доступную на {rpm_clamped:.0f} об/мин ({avail_power:.2f} кВт по кривой шпинделя)."
+        )
+    elif avail_power and power_motor > avail_power * 0.85:
+        warnings.append(
+            f"Нагрузка по мощности выше 85% от кривой шпинделя ({power_motor:.2f} / {avail_power:.2f} кВт при {rpm_clamped:.0f} об/мин)."
+        )
+
+    if avail_torque and torque_nm > avail_torque:
+        warnings.append(
+            f"Крутящий момент ({torque_nm:.1f} Н·м) превышает доступный на {rpm_clamped:.0f} об/мин ({avail_torque:.1f} Н·м)."
         )
 
     # 6. Chipbreaker operating zone check
@@ -325,6 +400,9 @@ def calculate_kienzle(inp: CuttingCalcInput) -> CuttingCalcResult:
         power_net_kw=round(power_net, 2),
         power_motor_kw=round(power_motor, 2),
         torque_nm=round(torque_nm, 1),
+        available_power_kw=avail_power,
+        available_torque_nm=avail_torque,
+        spindle_base_rpm=spindle_base_rpm,
         chip_thinning_factor=chip_thinning_factor,
         ra_um=ra_um,
         ld_ratio=ld_ratio,

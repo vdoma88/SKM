@@ -29,6 +29,9 @@ CREATE TYPE tool_category_enum AS ENUM (
     'INDEXABLE_DRILL',
     'MODULAR_DRILL',
     'SOLID_CARBIDE_DRILL',
+    'TAP_HOLDER',
+    'REAMER_CHUCK',
+    'FINE_BORING_HEAD',
     'BORING_BAR',
     'GROOVING_HOLDER'
 );

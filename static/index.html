@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0072CE" />
-  <title>SKM · ISO Tooling Selector Studio v1.1</title>
+  <title>SKM · Подбор и заказ пластин (СМП) v2.1</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -16,14 +16,17 @@
       <div class="brand-mark">SKM</div>
       <div>
         <div class="brand-title">
-          ISO Tooling Selector
-          <span class="brand-version">v1.1</span>
+          SKM · Подбор и заказ пластин
+          <span class="brand-version">v2.1</span>
         </div>
-        <div class="brand-sub">Подбор СМП · ISO 13399 / ISO 1832 / ISO 513 · Кинцле + Тейлор + Склад + 3D CAD</div>
+        <div class="brand-sub">Коммерческий подбор СМП и осевого инструмента · Остатки, цены, аналоги, КП и инженерные расчёты</div>
       </div>
     </div>
 
     <div class="topbar-actions">
+      <button class="cart-pill-btn" onclick="focusOrderCart()">
+        🛒 Заказ: <span id="topCartCount">0</span> поз. · <span id="topCartSum">0 ₽</span>
+      </button>
       <div id="connBadge" class="status-pill"><span class="status-dot"></span><span id="connText">Загрузка...</span></div>
       <div class="segmented" role="group" aria-label="Единицы измерения">
         <button id="btnMetric" class="active" onclick="setUnits('metric')">мм</button>
@@ -35,11 +38,23 @@
   </div>
 
   <nav class="nav-bar" aria-label="Разделы приложения">
-    <button class="nav-tab active" data-tab="selector" onclick="switchTab('selector')">
-      ⚙ Подбор и режимы
+    <span class="nav-group-label">Продажи:</span>
+    <button class="nav-tab active" data-tab="sales" onclick="switchTab('sales')">
+      🛒 Подбор и заказ <span id="salesCountBadge" class="tab-badge">36</span>
+    </button>
+    <button class="nav-tab" data-tab="stock" onclick="switchTab('stock')">
+      📦 Склад и цены <span id="stockBadge" class="tab-badge">0</span>
+    </button>
+    <span class="nav-divider" aria-hidden="true"></span>
+    <span class="nav-group-label">Для технолога:</span>
+    <button class="nav-tab" data-tab="selector" onclick="switchTab('selector')">
+      ⚙ Расчёт режимов
+    </button>
+    <button class="nav-tab" data-tab="threadlab" onclick="switchTab('threadlab')">
+      🔩 Резьба, H7 и G-код
     </button>
     <button class="nav-tab" data-tab="studio3d" onclick="switchTab('studio3d')">
-      🧊 3D-Просмотр и STEP/STL
+      🧊 3D-Модель
     </button>
     <button class="nav-tab" data-tab="compare" onclick="switchTab('compare')">
       ⚖ Сравнение <span id="compareBadge" class="tab-badge">0</span>
@@ -47,13 +62,159 @@
     <button class="nav-tab" data-tab="setups" onclick="switchTab('setups')">
       📋 Наладки и CAM <span id="setupsBadge" class="tab-badge">0</span>
     </button>
-    <button class="nav-tab" data-tab="stock" onclick="switchTab('stock')">
-      📦 Склад цеха <span id="stockBadge" class="tab-badge">0</span>
-    </button>
   </nav>
 </header>
 
 <main class="container">
+
+  <!-- MAIN SCREEN (DEFAULT): B2B SALES, QUICK SELECTION & ORDER / QUOTE BUILDER -->
+  <section id="tab-sales" class="tab-panel active">
+    <!-- Hero Search & Fast Commercial Filters -->
+    <section class="card sales-hero">
+      <div class="card-head" style="margin-bottom:10px;">
+        <div class="card-title" style="color:var(--accent);">Быстрый подбор пластин и инструмента для продажи / заказа</div>
+        <div class="card-subtitle" id="salesSummaryStat">36 позиций в каталоге</div>
+      </div>
+
+      <div class="sales-search-row">
+        <input id="salesSearchInput" class="sales-search-input" type="text"
+          placeholder="🔍 Введите код пластины (CNMG 120408, WNMG, APKT), державку (PCLNR) или материал (сталь, нержавейка, 40Х, Д16Т, титан)..."
+          oninput="renderSalesCatalog()" />
+        <button class="v-btn" onclick="resetSalesFilters()">✕ Сбросить фильтры</button>
+      </div>
+
+      <div class="preset-chips" style="margin-bottom:6px;">
+        <button class="chip" onclick="quickSalesSearch('CNMG 120408')">CNMG 120408</button>
+        <button class="chip" onclick="quickSalesSearch('WNMG')">WNMG (6 кромок)</button>
+        <button class="chip" onclick="quickSalesSearch('APKT')">APKT (фреза)</button>
+        <button class="chip" onclick="quickSalesSearch('нержавейка')">Нержавейка (M)</button>
+        <button class="chip" onclick="quickSalesSearch('алюминий')">Алюминий (N)</button>
+        <button class="chip" onclick="quickSalesSearch('чугун')">Чугун (K)</button>
+        <button class="chip" onclick="quickSalesSearch('сверло')">Свёрла</button>
+        <button class="chip" onclick="quickSalesSearch('метчик')">Метчики / Резьба</button>
+        <button class="chip" onclick="quickSalesSearch('развертка')">Развёртки H7</button>
+        <button class="chip" onclick="quickSalesSearch('MGMN')">Отрезка / Канавки</button>
+      </div>
+
+      <!-- Material Filter Pills -->
+      <div class="sales-filter-row" id="salesMatFilters">
+        <button class="mat-pill active" data-smat="ALL" onclick="setSalesMaterial('ALL')">Все материалы</button>
+        <button class="mat-pill" data-smat="P" onclick="setSalesMaterial('P')"><span class="mat-dot" style="background:var(--iso-P)"></span>P Сталь</button>
+        <button class="mat-pill" data-smat="M" onclick="setSalesMaterial('M')"><span class="mat-dot" style="background:var(--iso-M)"></span>M Нержавейка</button>
+        <button class="mat-pill" data-smat="K" onclick="setSalesMaterial('K')"><span class="mat-dot" style="background:var(--iso-K)"></span>K Чугун</button>
+        <button class="mat-pill" data-smat="N" onclick="setSalesMaterial('N')"><span class="mat-dot" style="background:var(--iso-N)"></span>N Алюминий</button>
+        <button class="mat-pill" data-smat="S" onclick="setSalesMaterial('S')"><span class="mat-dot" style="background:var(--iso-S)"></span>S Титан / Жаропр.</button>
+        <button class="mat-pill" data-smat="H" onclick="setSalesMaterial('H')"><span class="mat-dot" style="background:var(--iso-H)"></span>H Закалённая</button>
+      </div>
+
+      <!-- Operation Filter Pills -->
+      <div class="sales-filter-row" id="salesOpFilters">
+        <button class="op-pill active" data-sop="ALL" onclick="setSalesOp('ALL')">Все операции</button>
+        <button class="op-pill" data-sop="TURNING" onclick="setSalesOp('TURNING')">Точение</button>
+        <button class="op-pill" data-sop="MILLING" onclick="setSalesOp('MILLING')">Фрезерование</button>
+        <button class="op-pill" data-sop="DRILLING" onclick="setSalesOp('DRILLING')">Сверление / Резьба / H7</button>
+        <button class="op-pill" data-sop="GROOVING_THREADING" onclick="setSalesOp('GROOVING_THREADING')">Канавки / Отрезка</button>
+      </div>
+
+      <div class="sales-controls-bar">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+          <select id="salesAppFilter" style="width:auto;min-width:170px;" onchange="renderSalesCatalog()">
+            <option value="ALL">Обработка: любая</option>
+            <option value="FINISHING">Чистовая (гладкая)</option>
+            <option value="MEDIUM">Получистовая / Универсальная</option>
+            <option value="ROUGHING">Черновая / Удар / Корка</option>
+          </select>
+          <label class="switch-row" style="padding:6px 10px;">
+            <span>🟢 Только в наличии</span>
+            <input type="checkbox" id="salesOnlyInStock" onchange="renderSalesCatalog()" />
+          </label>
+          <div id="salesPocketPillWrap" style="display:none;"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--muted);">Сортировка:</span>
+          <select id="salesSortSelect" style="width:auto;min-width:190px;" onchange="renderSalesCatalog()">
+            <option value="relevance">Сначала лучшие / в наличии</option>
+            <option value="price_asc">Сначала дешевле (₽/шт)</option>
+            <option value="edge_price_asc">Выгоднее за кромку (₽/кр.)</option>
+            <option value="stock_desc">Макс. остаток на складе</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2-Column Commercial Workspace: Product Showcase + Sticky Order/Quote Cart -->
+    <div class="sales-workspace">
+      <div>
+        <div id="salesCatalogGrid" class="sales-grid"></div>
+      </div>
+
+      <aside class="order-sidebar" id="orderCartPanel">
+        <section class="card">
+          <div class="card-head">
+            <div class="card-title">🛒 Корзина заказа и КП</div>
+            <button class="link-subtle" onclick="clearOrderCart()">Очистить</button>
+          </div>
+
+          <div id="orderCartList" class="cart-list"></div>
+
+          <hr class="divider" />
+
+          <div class="field" style="margin-bottom:8px;">
+            <div class="field-label"><span>Клиент / Компания</span></div>
+            <input type="text" id="ordCustomerName" placeholder="ООО «ПромМех» / Иван Петров" oninput="renderOrderCart()" />
+          </div>
+          <div class="modal-grid" style="margin-bottom:8px;">
+            <div class="field" style="margin-bottom:0;">
+              <div class="field-label"><span>ИНН (необяз.)</span></div>
+              <input type="text" id="ordCustomerInn" placeholder="0274000000" oninput="renderOrderCart()" />
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <div class="field-label"><span>Скидка (%)</span></div>
+              <input type="number" id="ordDiscountPct" min="0" max="50" step="1" value="0" oninput="onOrderDiscountInput()" />
+            </div>
+          </div>
+          <div class="discount-pills" style="margin-bottom:10px;">
+            <button class="disc-btn active" data-disc="0" onclick="setOrderDiscount(0)">0%</button>
+            <button class="disc-btn" data-disc="5" onclick="setOrderDiscount(5)">−5%</button>
+            <button class="disc-btn" data-disc="10" onclick="setOrderDiscount(10)">−10%</button>
+            <button class="disc-btn" data-disc="15" onclick="setOrderDiscount(15)">−15%</button>
+            <button class="disc-btn" data-disc="20" onclick="setOrderDiscount(20)">−20%</button>
+          </div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <label class="switch-row" style="padding:6px 10px;">
+              <span>Включать НДС 20% в расчёт КП</span>
+              <input type="checkbox" id="ordIncludeVat" checked onchange="renderOrderCart()" />
+            </label>
+          </div>
+
+          <div class="field" style="margin-bottom:10px;">
+            <input type="text" id="ordComment" placeholder="Условия поставки / комментарий (напр. отгрузка ТК СДЭК)" oninput="renderOrderCart()" />
+          </div>
+
+          <div class="totals-box" id="orderTotalsBox"></div>
+
+          <div class="order-actions-grid" style="margin-top:11px;">
+            <button class="icon-btn primary full" style="justify-content:center;padding:9px;" onclick="openQuoteModal()">📄 Сформировать КП / Печать PDF</button>
+            <button class="v-btn accent" onclick="copyOrderMessenger()">💬 В Telegram / WA</button>
+            <button class="v-btn" onclick="exportOrderExcelCSV()">⬇ В Excel (.csv)</button>
+            <button class="v-btn full" onclick="saveCurrentOrder()">💾 Сохранить заказ в историю</button>
+          </div>
+        </section>
+
+        <section class="card" id="savedOrdersCard" style="display:none;">
+          <div class="card-head" style="margin-bottom:8px;">
+            <div class="card-title">История заказов / КП</div>
+            <span class="card-subtitle" id="savedOrdersCount">0</span>
+          </div>
+          <div id="savedOrdersList" style="display:flex;flex-direction:column;gap:7px;"></div>
+        </section>
+      </aside>
+    </div>
+  </section>
+
+  <!-- TAB 1: SELECTOR, PHYSICS & TAYLOR ECONOMICS -->
+  <section id="tab-selector" class="tab-panel">
   <!-- Persistent Visual ISO 1832 Decoder -->
   <section class="card">
     <div class="card-head">
@@ -78,6 +239,10 @@
         <button class="chip" onclick="setIso('SOMT 11T308')">SOMT 11T308</button>
         <button class="chip" onclick="setIso('MOD-DRL-200')">MOD-DRL-200</button>
         <button class="chip" onclick="setIso('SC-DRL-080-5D')">SC-DRL-080-5D</button>
+        <button class="chip" onclick="setIso('TAP-M12-BL')">TAP-M12-BL</button>
+        <button class="chip" onclick="setIso('TM-M16')">TM-M16</button>
+        <button class="chip" onclick="setIso('REAM-H7-200')">REAM-H7-200</button>
+        <button class="chip" onclick="setIso('FBORE-MIC-25')">FBORE-MIC-25</button>
         <button class="chip" onclick="setIso('MGMN 300')">MGMN 300</button>
         <button class="chip" onclick="setIso('16ER AG60')">16ER AG60</button>
       </div>
@@ -90,9 +255,6 @@
       </div>
     </div>
   </section>
-
-  <!-- TAB 1: SELECTOR, PHYSICS & TAYLOR ECONOMICS -->
-  <section id="tab-selector" class="tab-panel active">
     <div class="workspace">
       <aside class="card sidebar">
         <div class="card-head">
@@ -184,11 +346,13 @@
 
           <div class="field">
             <div class="field-label"><span>Тип осевого инструмента</span></div>
-            <div class="seg-btns cols-4">
-              <button class="seg-btn active" data-ax="ALL" onclick="selectAxialSubtype('ALL')">Все типы</button>
-              <button class="seg-btn" data-ax="INDEXABLE_U_DRILL" onclick="selectAxialSubtype('INDEXABLE_U_DRILL')">U-свёрла (СМП)</button>
+            <div class="seg-btns cols-3-wrap">
+              <button class="seg-btn active" data-ax="ALL" onclick="selectAxialSubtype('ALL')">Все (18)</button>
+              <button class="seg-btn" data-ax="INDEXABLE_U_DRILL" onclick="selectAxialSubtype('INDEXABLE_U_DRILL')">U-свёрла</button>
               <button class="seg-btn" data-ax="MODULAR_TIP" onclick="selectAxialSubtype('MODULAR_TIP')">Коронки</button>
               <button class="seg-btn" data-ax="SOLID_CARBIDE" onclick="selectAxialSubtype('SOLID_CARBIDE')">Монолит ЦТ</button>
+              <button class="seg-btn" data-ax="TAP_THREAD_MILL" onclick="selectAxialSubtype('TAP_THREAD_MILL')">Метч./Резьб.</button>
+              <button class="seg-btn" data-ax="REAMER_FINE_BORE" onclick="selectAxialSubtype('REAMER_FINE_BORE')">Разв./Раст. H7</button>
             </div>
           </div>
 
@@ -254,7 +418,13 @@
           <section class="card">
             <div class="card-head">
               <div class="card-title" id="chartCardTitle">Карта стружколома (a<sub>p</sub> / f)</div>
-              <div class="card-subtitle" id="cbTitle" style="color:var(--accent);">—</div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div class="chart-mode-bar" role="group" aria-label="Режим графика">
+                  <button id="btnChartTool" class="active" onclick="setChartMode('tool')">Инструмент</button>
+                  <button id="btnChartSpindle" onclick="setChartMode('spindle')">Кривая шпинделя</button>
+                </div>
+                <div class="card-subtitle" id="cbTitle" style="color:var(--accent);">—</div>
+              </div>
             </div>
             <div class="chart-wrap">
               <svg id="cbChart" class="cb-chart" viewBox="0 0 420 245"></svg>
@@ -317,6 +487,131 @@
         </section>
       </div>
     </div>
+  </section>
+
+  <!-- TAB 2: THREADING (M/MF/G/NPT), HOLE FINISHING (H7/IT6) & CNC G-CODE STUDIO -->
+  <section id="tab-threadlab" class="tab-panel">
+    <div class="lab-grid">
+      <!-- Threading Calculator -->
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title">Калькулятор резьбы: метчики, раскатники и резьбофрезы (M / MF / G / NPT)</div>
+          <div class="card-subtitle" id="thBadge" style="color:var(--accent);">M12 · P=1.75</div>
+        </div>
+        <div class="lab-form-grid">
+          <div class="field">
+            <div class="field-label"><span>Стандарт резьбы</span></div>
+            <select id="thFamilySel" onchange="populateThreadCodes()">
+              <option value="M">M — Метрическая крупная (60°)</option>
+              <option value="MF">MF — Метрическая мелкая (60°)</option>
+              <option value="G">G — Трубная цилиндр. BSPP (55°)</option>
+              <option value="NPT">NPT — Трубная коническая (60°)</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Размер резьбы</span></div>
+            <select id="thCodeSel" onchange="runThreadLab()"></select>
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Способ нарезания</span></div>
+            <select id="thMethodSel" onchange="runThreadLab()">
+              <option value="CUT_TAP">Режущий метчик (G84)</option>
+              <option value="FORM_TAP">Раскатник бесстружечный (G84)</option>
+              <option value="THREAD_MILL">ЦТ резьбофреза (G02/G03)</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Тип отверстия</span></div>
+            <select id="thHoleTypeSel" onchange="runThreadLab()">
+              <option value="BLIND">Глухое отверстие</option>
+              <option value="THROUGH">Сквозное отверстие</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Глубина резьбы (мм)</span></div>
+            <input type="number" id="thDepthInp" value="20" min="3" max="120" step="1" oninput="runThreadLab()" />
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Радиальных проходов (фреза)</span></div>
+            <input type="number" id="thPassesInp" value="1" min="1" max="5" step="1" oninput="runThreadLab()" />
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi"><div class="k-label">Сверло под резьбу</div><div class="k-val" id="thPreDrill" style="color:var(--accent);">—</div><div class="k-sub" id="thMinDepth">глубина сверл.: —</div></div>
+          <div class="kpi"><div class="k-label">Обороты / Скорость</div><div class="k-val" id="thRpm">—</div><div class="k-sub" id="thVc">Vc: —</div></div>
+          <div class="kpi"><div class="k-label">Подача (Vf / ось)</div><div class="k-val" id="thVf">—</div><div class="k-sub" id="thVfCenter">шаг P: —</div></div>
+          <div class="kpi"><div class="k-label">Крутящий момент M<sub>t</sub></div><div class="k-val" id="thTorque">—</div><div class="k-sub" id="thAngle">профиль: 60°</div></div>
+        </div>
+        <div class="holder-pill" id="thToolRec" style="margin-bottom:8px;">Инструмент: —</div>
+        <div id="thWarnBox" class="warnings-box ok" style="margin-bottom:10px;">✓ Резьбонарезание в оптимальном режиме.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="icon-btn primary" onclick="sendThreadToGCode()">⚡ Сгенерировать G-код резьбы</button>
+        </div>
+      </section>
+
+      <!-- Precision Hole Finishing (H7 / IT6) -->
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title">Чистовая обработка отверстий: Развёртывание (H7) и Растачивание (IT6)</div>
+          <div class="card-subtitle" id="hfBadge" style="color:var(--accent);">Ø20 H7 (+21 / 0 мкм)</div>
+        </div>
+        <div class="lab-form-grid">
+          <div class="field">
+            <div class="field-label"><span>Номинальный диаметр (мм)</span></div>
+            <input type="number" id="hfDiamInp" value="20" min="3" max="200" step="0.5" oninput="runHoleFinishLab()" />
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Квалитет (ISO 286)</span></div>
+            <select id="hfGradeSel" onchange="runHoleFinishLab()">
+              <option value="H7">H7 (посадка под подшипник/штифт)</option>
+              <option value="H8">H8 (стандартная точная посадка)</option>
+              <option value="IT6">IT6 (прецизионная расточка)</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Метод чистовой обработки</span></div>
+            <select id="hfMethodSel" onchange="runHoleFinishLab()">
+              <option value="REAMING">ЦТ развёртка (G85)</option>
+              <option value="FINE_BORING">Микрометрич. расточная головка (G76)</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="field-label"><span>Глубина отверстия (мм)</span></div>
+            <input type="number" id="hfDepthInp" value="45" min="5" max="250" step="1" oninput="runHoleFinishLab()" />
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi"><div class="k-label">Предварит. отверстие</div><div class="k-val" id="hfPreOpt" style="color:var(--accent);">—</div><div class="k-sub" id="hfPreRange">окно: —</div></div>
+          <div class="kpi"><div class="k-label">Допуск ISO 286</div><div class="k-val" id="hfTol">—</div><div class="k-sub" id="hfAllow">припуск на сторону: —</div></div>
+          <div class="kpi"><div class="k-label">Режимы (RPM / Vf)</div><div class="k-val" id="hfRpm">—</div><div class="k-sub" id="hfVf">Vf: —</div></div>
+          <div class="kpi"><div class="k-label">Ожидаемая R<sub>a</sub> / Вылет</div><div class="k-val" id="hfRa">—</div><div class="k-sub" id="hfLd">L/D: —</div></div>
+        </div>
+        <div class="holder-pill" id="hfHolder" style="margin-bottom:8px;">Оснастка: —</div>
+        <div id="hfWarnBox" class="warnings-box ok" style="margin-bottom:10px;">✓ Припуск и жёсткость в норме.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="icon-btn primary" onclick="sendHoleFinishToGCode()">⚡ Сгенерировать G-код (G85 / G76)</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Live CNC G-Code Studio (Fanuc / Haas & Siemens 840D) -->
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Генератор управляющей программы ЧПУ (G-код / циклы)</div>
+        <div class="viewer3d-btns">
+          <div class="segmented" role="group" aria-label="Стойка ЧПУ">
+            <button id="btnCncFanuc" class="active" onclick="setCncController('FANUC')">Fanuc / Haas</button>
+            <button id="btnCncSiemens" onclick="setCncController('SIEMENS')">Siemens 840D</button>
+          </div>
+          <button class="v-btn accent" onclick="sendSelectedCandidateToGCode()">↻ Из текущей пластины</button>
+          <button class="v-btn" onclick="copyGCode()">📋 Копировать</button>
+          <button class="v-btn" onclick="downloadGCodeNC()">⬇ Скачать .NC</button>
+        </div>
+      </div>
+      <pre id="gcodeOutput" class="gcode-pre"></pre>
+    </section>
   </section>
 
   <!-- TAB 2: 3D STUDIO & CAD VIEWER -->
@@ -418,7 +713,23 @@
       <div id="stockTableWrap" class="table-scroll"></div>
     </section>
   </section>
+
 </main>
+
+<!-- Commercial Proposal / Print Quote Modal -->
+<div id="quoteModal" class="modal-backdrop" onclick="if(event.target===this) closeQuoteModal()">
+  <div class="quote-modal-card">
+    <div class="card-head no-print">
+      <div class="card-title">Коммерческое предложение (КП) — готово к печати или PDF</div>
+      <div class="viewer3d-btns">
+        <button class="v-btn accent" onclick="copyOrderMessenger()">💬 Копировать текст</button>
+        <button class="icon-btn primary" onclick="printQuoteSheet()">🖨 Печать / Сохранить PDF</button>
+        <button class="v-btn" onclick="closeQuoteModal()">✕</button>
+      </div>
+    </div>
+    <div id="quoteSheetContent" class="quote-sheet"></div>
+  </div>
+</div>
 
 <!-- Custom Machine Modal -->
 <div id="machineModal" class="modal-backdrop" onclick="if(event.target===this) closeMachineModal()">
