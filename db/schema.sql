@@ -27,6 +27,8 @@ CREATE TYPE tool_category_enum AS ENUM (
     'SHOULDER_MILL',
     'COPY_MILL',
     'INDEXABLE_DRILL',
+    'MODULAR_DRILL',
+    'SOLID_CARBIDE_DRILL',
     'BORING_BAR',
     'GROOVING_HOLDER'
 );
@@ -57,7 +59,9 @@ CREATE TYPE clamping_system_enum AS ENUM (
     'LEVER',
     'TOP_CLAMP',
     'WEDGE',
-    'CARTRIDGE'
+    'CARTRIDGE',
+    'BAYONET',
+    'INTEGRAL'
 );
 
 CREATE TYPE coolant_mode_enum AS ENUM (

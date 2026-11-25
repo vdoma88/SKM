@@ -7,7 +7,10 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from app.cam_export import AssemblyExportItem, build_freecad_toolbit, build_fusion360_library, build_gtc_iso13399_package
+from app.economics import EconomicsInput, calculate_economics
 from app.geometry3d import build_iso1832_mesh, export_iso1832_stl
+from app.inventory import generate_sample_stock_csv, parse_stock_csv
 from app.iso1832 import parse_iso1832
 from app.kienzle import calculate_kienzle, CuttingCalcInput
 import app.repository as repo_mod
@@ -83,10 +86,10 @@ def test_repository_memory_seed_and_cross_references():
     assert repo.mode == "memory_seed"
     meta = repo.get_meta()
     assert len(meta["material_subgroups"]) == 12
-    assert len(repo.list_inserts()) == 17
-    assert len(repo.list_inserts("TURNING")) == 10
+    assert len(repo.list_inserts()) == 29
+    assert len(repo.list_inserts("TURNING")) == 12
     assert len(repo.list_inserts("MILLING")) == 4
-    assert len(repo.list_inserts("DRILLING")) == 3
+    assert len(repo.list_inserts("DRILLING")) == 11
 
     xrefs = repo.get_cross_references("ins-1")
     assert len(xrefs) >= 2
@@ -280,6 +283,197 @@ def test_geometry3d_parametric_meshes_and_stl():
     assert stl.strip().endswith("endsolid WNMG080408")
 
 
+def test_grooving_threading_parser_and_kienzle():
+    p_grv = parse_iso1832("MGMN 300")
+    assert p_grv.valid is True
+    assert p_grv.seat_pocket_signature == "L-N-300-476-N"
+    assert p_grv.cutting_edges_count == 2
+
+    p_thr = parse_iso1832("16ER AG60")
+    assert p_thr.valid is True
+    assert p_thr.seat_pocket_signature == "T-N-953-397-T"
+    assert p_thr.cutting_edges_count == 3
+
+    p_tnmg = parse_iso1832("TNMG 160408")
+    assert p_tnmg.valid is True
+    assert p_tnmg.seat_pocket_signature == "T-N-953-476-G"
+    assert p_tnmg.cutting_edges_count == 6
+
+    res = calculate_kienzle(
+        CuttingCalcInput(
+            operation_domain="GROOVING_THREADING",
+            kc1_1_mpa=1500.0,
+            mc_exponent=0.25,
+            vc_m_min=150.0,
+            feed_mm=0.10,
+            ap_mm=3.0,
+            diameter_mm=50.0,
+        )
+    )
+    assert res.rpm_clamped > 900.0
+    assert res.fc_n > 500.0
+
+
+def test_taylor_economics_and_warehouse_csv():
+    econ_stable = calculate_economics(
+        EconomicsInput(
+            iso_group="P",
+            coating_method="CVD",
+            stability="STABLE",
+            vc_actual_m_min=290.0,
+            vc_opt_m_min=290.0,
+            mrr_cm3_min=150.0,
+            volume_to_remove_cm3=75.0,
+            insert_price_rub=620.0,
+            cutting_edges_count=4,
+            machine_rate_rub_hr=3600.0,
+        )
+    )
+    assert econ_stable.tool_life_edge_min == 15.0
+    assert econ_stable.cutting_time_part_min == 0.5
+    assert econ_stable.parts_per_edge == 30.0
+    assert econ_stable.total_cost_part_rub > econ_stable.machine_cost_part_rub
+
+    # Higher speed reduces Taylor tool life sharply
+    econ_fast = calculate_economics(
+        EconomicsInput(
+            iso_group="P",
+            coating_method="CVD",
+            stability="STABLE",
+            vc_actual_m_min=350.0,
+            vc_opt_m_min=290.0,
+            mrr_cm3_min=180.0,
+            volume_to_remove_cm3=75.0,
+            insert_price_rub=620.0,
+            cutting_edges_count=4,
+            machine_rate_rub_hr=3600.0,
+        )
+    )
+    assert econ_fast.tool_life_edge_min < econ_stable.tool_life_edge_min
+
+    # Warehouse CSV parsing (sample + Russian headers)
+    sample_csv = generate_sample_stock_csv()
+    parsed = parse_stock_csv(sample_csv)
+    assert len(parsed) == 20
+    assert any(i.normalized_code == "CNMG120408" and i.qty == 40 for i in parsed)
+
+    ru_csv = "Пластина;Сплав;Остаток;Цена;Ячейка\nWNMG 080408;GEN-P25-CVD;15;720,5;B-02\n"
+    parsed_ru = parse_stock_csv(ru_csv)
+    assert len(parsed_ru) == 1
+    assert parsed_ru[0].qty == 15
+    assert parsed_ru[0].unit_price_rub == 720.5
+
+    repo = ToolingRepository(db_url="")
+    assert len(repo.list_inserts("GROOVING_THREADING")) == 2
+    saved_asm = repo.create_assembly({"name": "Test Setup", "iso_code": "CNMG 120408"})
+    assert len(repo.list_assemblies()) == 1
+    assert repo.delete_assembly(saved_asm["id"]) is True
+
+
+def test_cam_exporters_gtc_fusion360_freecad():
+    item = AssemblyExportItem(
+        name="CNMG 120408 · P1",
+        operation="TURNING",
+        iso_code="CNMG 120408",
+        grade_code="GEN-P25-CVD",
+        chipbreaker_code="GEN-PM",
+        holder_code="PCLNR 2525M 12",
+        diameter_mm=60.0,
+        vc_m_min=290.0,
+        rpm=1538.0,
+        feed_mm=0.30,
+        vf_mm_min=461.0,
+        ap_mm=2.5,
+    )
+    gtc = build_gtc_iso13399_package([item])
+    assert gtc["gtc_package_information"]["standard"] == "ISO 13399"
+    assert gtc["products"][0]["cutting_item"]["POCKET_SIGNATURE"] == "C-N-1270-476-G"
+
+    f360 = build_fusion360_library([item])
+    assert f360["version"] == 23
+    assert f360["data"][0]["product-id"] == "CNMG 120408"
+
+    fc = build_freecad_toolbit(item)
+    assert fc["version"] == 2
+    assert fc["attribute"]["holder_code"] == "PCLNR 2525M 12"
+
+
+def test_axial_tooling_suite_physics_parser_and_3d():
+    # 1. Parser for extended axial tools (U-drill SOMT/WCMT, Modular Crowns, Solid Carbide)
+    for code, exp_sig in (
+        ("SOMT 11T308", "S-O-1100-397-T"),
+        ("WCMT 06T308", "W-C-953-397-T"),
+        ("MOD-DRL-140", "DRL-M-1400-672-B"),
+        ("MOD-DRL-200", "DRL-M-2000-960-B"),
+        ("SC-DRL-080-5D", "DRL-S-800-500-I"),
+        ("SC-DRL-120-8D", "DRL-S-1200-800-I"),
+        ("SC-DRL-100-AL", "DRL-S-1000-500-I"),
+        ("SC-DRL-060-H", "DRL-S-600-500-I"),
+    ):
+        p = parse_iso1832(code)
+        assert p.valid is True, f"Failed axial parse for {code}: {p.error}"
+        assert p.seat_pocket_signature == exp_sig, f"{code}: {p.seat_pocket_signature} != {exp_sig}"
+
+    # 2. Deep solid carbide 8xD drilling: thrust Ff, pilot hole, coolant warning, G-code cycle
+    res_deep = calculate_kienzle(
+        CuttingCalcInput(
+            operation_domain="DRILLING",
+            kc1_1_mpa=1500.0,
+            mc_exponent=0.25,
+            vc_m_min=105.0,
+            feed_mm=0.22,
+            diameter_mm=12.0,
+            hole_depth_mm=90.0,
+            axial_tool_subtype="SOLID_CARBIDE",
+            point_angle_deg=140.0,
+            drill_ld_max=8.0,
+            hole_entry_type="FLAT",
+            coolant_pressure_bar=20.0,
+            machine_max_rpm=12000,
+            machine_max_power_kw=15.0,
+            machine_max_thrust_kn=20.0,
+        )
+    )
+    assert res_deep.axial_thrust_n is not None and res_deep.axial_thrust_n > 2000.0
+    assert res_deep.drill_ld_ratio == 7.5
+    assert res_deep.pilot_hole_required is True
+    assert res_deep.required_coolant_bar == 40.0
+    assert "Пилот 2xD" in (res_deep.recommended_cycle or "")
+    assert any("Давление СОЖ" in w for w in res_deep.warnings)
+
+    # 3. U-drill on angled entry: 40% entry feed reduction & no pecking G83
+    res_udrill = calculate_kienzle(
+        CuttingCalcInput(
+            operation_domain="DRILLING",
+            kc1_1_mpa=1700.0,
+            mc_exponent=0.25,
+            vc_m_min=160.0,
+            feed_mm=0.12,
+            diameter_mm=30.0,
+            hole_depth_mm=120.0,
+            axial_tool_subtype="INDEXABLE_U_DRILL",
+            point_angle_deg=180.0,
+            drill_ld_max=3.0,
+            hole_entry_type="ANGLED_OR_CURVED",
+            coolant_pressure_bar=25.0,
+        )
+    )
+    assert res_udrill.entry_feed_mm == 0.072
+    assert "БЕЗ G83" in (res_udrill.recommended_cycle or "")
+    assert any("превышает вылет корпуса" in w for w in res_udrill.warnings)
+    assert any("Наклонный/криволинейный вход" in w for w in res_udrill.warnings)
+
+    # 4. 3D helical drill mesh & STL export for solid and modular drills
+    m_sc = build_iso1832_mesh("SC-DRL-120-8D")
+    assert m_sc.shape_code == "DRL"
+    assert m_sc.triangle_count >= 500
+    assert abs(m_sc.bbox_mm["x"] - 12.0) < 0.2
+
+    stl_mod = export_iso1832_stl("MOD-DRL-200")
+    assert stl_mod.startswith("solid MODDRL200")
+    assert stl_mod.strip().endswith("endsolid MODDRL200")
+
+
 if __name__ == "__main__":
     test_iso1832_pg_rounding_and_expanded_codes()
     test_kienzle_turning_and_milling()
@@ -287,4 +481,8 @@ if __name__ == "__main__":
     test_repository_postgres_mock_driver()
     test_surface_roughness_and_beam_deflection()
     test_geometry3d_parametric_meshes_and_stl()
-    print("ALL SKM v0.4 TESTS (INCLUDING 3D GEOMETRY & STL) PASSED!")
+    test_grooving_threading_parser_and_kienzle()
+    test_taylor_economics_and_warehouse_csv()
+    test_cam_exporters_gtc_fusion360_freecad()
+    test_axial_tooling_suite_physics_parser_and_3d()
+    print("ALL SKM v1.1 TESTS (10 SUITES, INCLUDING AXIAL TOOLING) PASSED!")

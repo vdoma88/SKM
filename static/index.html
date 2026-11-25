@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>SKM · ISO Tooling Selector Studio</title>
+  <meta name="theme-color" content="#0072CE" />
+  <title>SKM · ISO Tooling Selector Studio v1.1</title>
+  <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -15,9 +17,9 @@
       <div>
         <div class="brand-title">
           ISO Tooling Selector
-          <span class="brand-version">v0.5</span>
+          <span class="brand-version">v1.1</span>
         </div>
-        <div class="brand-sub">Бренд-нейтральный подбор СМП · ISO 13399 / ISO 1832 / ISO 513 · Кинцле + 3D CAD</div>
+        <div class="brand-sub">Подбор СМП · ISO 13399 / ISO 1832 / ISO 513 · Кинцле + Тейлор + Склад + 3D CAD</div>
       </div>
     </div>
 
@@ -43,7 +45,10 @@
       ⚖ Сравнение <span id="compareBadge" class="tab-badge">0</span>
     </button>
     <button class="nav-tab" data-tab="setups" onclick="switchTab('setups')">
-      📋 Наладки и экспорт <span id="setupsBadge" class="tab-badge">0</span>
+      📋 Наладки и CAM <span id="setupsBadge" class="tab-badge">0</span>
+    </button>
+    <button class="nav-tab" data-tab="stock" onclick="switchTab('stock')">
+      📦 Склад цеха <span id="stockBadge" class="tab-badge">0</span>
     </button>
   </nav>
 </header>
@@ -52,8 +57,8 @@
   <!-- Persistent Visual ISO 1832 Decoder -->
   <section class="card">
     <div class="card-head">
-      <div class="card-title">Визуальный ISO 1832 декодер пластины</div>
-      <div class="card-subtitle">Введите обозначение или выберите ходовой пресет</div>
+      <div class="card-title">Визуальный ISO 1832 / канавочно-резьбовой декодер</div>
+      <div class="card-subtitle">Введите обозначение (CNMG, WNMG, APKT, MGMN 300, 16ER AG60) или выберите пресет</div>
     </div>
     <div class="decoder-controls">
       <div class="iso-input-wrap">
@@ -62,14 +67,19 @@
       <div class="preset-chips">
         <button class="chip" onclick="setIso('CNMG 120408')">CNMG 120408</button>
         <button class="chip" onclick="setIso('WNMG 080408')">WNMG 080408</button>
+        <button class="chip" onclick="setIso('TNMG 160408')">TNMG 160408</button>
         <button class="chip" onclick="setIso('DNMG 150608')">DNMG 150608</button>
         <button class="chip" onclick="setIso('VNMG 160404')">VNMG 160404</button>
-        <button class="chip" onclick="setIso('SNMG 120412')">SNMG 120412</button>
+        <button class="chip" onclick="setIso('CCGT 09T304-AL')">CCGT 09T304-AL</button>
         <button class="chip" onclick="setIso('CNGA 120408')">CNGA 120408</button>
         <button class="chip" onclick="setIso('APKT 160408')">APKT 160408</button>
         <button class="chip" onclick="setIso('SEKT 120408')">SEKT 120408</button>
-        <button class="chip" onclick="setIso('RDMT 120400')">RDMT 120400</button>
         <button class="chip" onclick="setIso('SPMG 090408')">SPMG 090408</button>
+        <button class="chip" onclick="setIso('SOMT 11T308')">SOMT 11T308</button>
+        <button class="chip" onclick="setIso('MOD-DRL-200')">MOD-DRL-200</button>
+        <button class="chip" onclick="setIso('SC-DRL-080-5D')">SC-DRL-080-5D</button>
+        <button class="chip" onclick="setIso('MGMN 300')">MGMN 300</button>
+        <button class="chip" onclick="setIso('16ER AG60')">16ER AG60</button>
       </div>
     </div>
     <div class="decoder-body">
@@ -81,7 +91,7 @@
     </div>
   </section>
 
-  <!-- TAB 1: SELECTOR & PHYSICS -->
+  <!-- TAB 1: SELECTOR, PHYSICS & TAYLOR ECONOMICS -->
   <section id="tab-selector" class="tab-panel active">
     <div class="workspace">
       <aside class="card sidebar">
@@ -111,10 +121,11 @@
 
         <div class="field">
           <div class="field-label"><span>Тип операции</span></div>
-          <div class="seg-btns">
+          <div class="seg-btns cols-4">
             <button class="seg-btn active" data-op="TURNING" onclick="selectOp('TURNING')">Точение</button>
             <button class="seg-btn" data-op="MILLING" onclick="selectOp('MILLING')">Фрезерование</button>
-            <button class="seg-btn" data-op="DRILLING" onclick="selectOp('DRILLING')">Сверление СМП</button>
+            <button class="seg-btn" data-op="DRILLING" onclick="selectOp('DRILLING')">Осевой инструмент</button>
+            <button class="seg-btn" data-op="GROOVING_THREADING" onclick="selectOp('GROOVING_THREADING')">Канавки / Резьба</button>
           </div>
         </div>
 
@@ -135,10 +146,17 @@
           </div>
         </div>
 
+        <div class="field">
+          <label class="switch-row">
+            <span>📦 Только в наличии на складе</span>
+            <input type="checkbox" id="onlyInStockChk" onchange="runSelection()" />
+          </label>
+        </div>
+
         <hr class="divider" />
 
         <div class="field" id="apField">
-          <div class="field-label"><span>Глубина резания a<sub>p</sub></span><span class="field-val" id="apVal">2.00 мм</span></div>
+          <div class="field-label"><span>Глубина резания / ширина a<sub>p</sub></span><span class="field-val" id="apVal">2.00 мм</span></div>
           <input type="range" id="apSlider" min="0.1" max="6.5" step="0.1" value="2.0" oninput="onSliderChange()" />
         </div>
 
@@ -157,25 +175,77 @@
           <input type="range" id="diamSlider" min="16" max="200" step="2" value="50" oninput="onSliderChange()" />
         </div>
 
+        <!-- Dedicated Axial Tooling Panel (visible in DRILLING mode) -->
+        <div id="axialControls" class="axial-panel" style="display:none;">
+          <div class="axial-panel-title">
+            <span>Параметры осевого сверления</span>
+            <span id="axialLdLive" style="font-family:var(--mono);">3.0xD</span>
+          </div>
+
+          <div class="field">
+            <div class="field-label"><span>Тип осевого инструмента</span></div>
+            <div class="seg-btns cols-4">
+              <button class="seg-btn active" data-ax="ALL" onclick="selectAxialSubtype('ALL')">Все типы</button>
+              <button class="seg-btn" data-ax="INDEXABLE_U_DRILL" onclick="selectAxialSubtype('INDEXABLE_U_DRILL')">U-свёрла (СМП)</button>
+              <button class="seg-btn" data-ax="MODULAR_TIP" onclick="selectAxialSubtype('MODULAR_TIP')">Коронки</button>
+              <button class="seg-btn" data-ax="SOLID_CARBIDE" onclick="selectAxialSubtype('SOLID_CARBIDE')">Монолит ЦТ</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-label"><span>Глубина отверстия L<sub>отв</sub></span><span class="field-val" id="holeDepthVal">60.00 мм</span></div>
+            <input type="range" id="holeDepthSlider" min="10" max="220" step="2" value="60" oninput="onSliderChange()" />
+          </div>
+
+          <div class="field">
+            <div class="field-label"><span>Условия входа / выхода</span></div>
+            <select id="holeEntrySelect" onchange="runSelection()">
+              <option value="FLAT">Плоский торец (стандарт)</option>
+              <option value="ANGLED_OR_CURVED">Наклонная / цилиндр. поверхность</option>
+              <option value="CROSS_HOLE">Пересечение отверстий</option>
+              <option value="STACKED">Пакет листов</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <div class="field-label"><span>Давление СОЖ станка</span><span class="field-val" id="coolantBarVal">20 бар</span></div>
+            <input type="range" id="coolantBarSlider" min="5" max="70" step="5" value="20" oninput="onSliderChange()" />
+          </div>
+        </div>
+
+        <div id="overhangControls">
+          <hr class="divider" />
+
+          <div class="field">
+            <div class="field-label"><span>Вылет оправки L</span><span class="field-val" id="overhangVal">60.00 мм</span></div>
+            <input type="range" id="overhangSlider" min="20" max="200" step="5" value="60" oninput="onSliderChange()" />
+          </div>
+
+          <div class="field">
+            <div class="field-label"><span>Диаметр оправки D<sub>ш</sub></span><span class="field-val" id="shankVal">20.00 мм</span></div>
+            <input type="range" id="shankSlider" min="10" max="50" step="2" value="20" oninput="onSliderChange()" />
+          </div>
+
+          <div class="field">
+            <div class="field-label"><span>Материал оправки</span></div>
+            <select id="shankMatSelect" onchange="runSelection()">
+              <option value="STEEL">Сталь (E=210 ГПа · L/D ≤ 4)</option>
+              <option value="CARBIDE">Твёрдый сплав (E=580 ГПа · L/D ≤ 6.5)</option>
+              <option value="DAMPED">Антивибрационная (L/D ≤ 10)</option>
+            </select>
+          </div>
+        </div>
+
         <hr class="divider" />
 
         <div class="field">
-          <div class="field-label"><span>Вылет оправки L</span><span class="field-val" id="overhangVal">60.00 мм</span></div>
-          <input type="range" id="overhangSlider" min="20" max="200" step="5" value="60" oninput="onSliderChange()" />
+          <div class="field-label"><span>Объём съёма на деталь</span><span class="field-val" id="volVal">80 см³</span></div>
+          <input type="range" id="volSlider" min="10" max="500" step="10" value="80" oninput="onSliderChange()" />
         </div>
 
         <div class="field">
-          <div class="field-label"><span>Диаметр оправки D<sub>ш</sub></span><span class="field-val" id="shankVal">20.00 мм</span></div>
-          <input type="range" id="shankSlider" min="10" max="50" step="2" value="20" oninput="onSliderChange()" />
-        </div>
-
-        <div class="field">
-          <div class="field-label"><span>Материал оправки</span></div>
-          <select id="shankMatSelect" onchange="runSelection()">
-            <option value="STEEL">Сталь (E=210 ГПа · L/D ≤ 4)</option>
-            <option value="CARBIDE">Твёрдый сплав (E=580 ГПа · L/D ≤ 6.5)</option>
-            <option value="DAMPED">Антивибрационная (L/D ≤ 10)</option>
-          </select>
+          <div class="field-label"><span>Ставка станко-часа</span><span class="field-val" id="rateVal">3500 ₽/ч</span></div>
+          <input type="range" id="rateSlider" min="1500" max="9000" step="250" value="3500" oninput="onSliderChange()" />
         </div>
       </aside>
 
@@ -183,14 +253,14 @@
         <div class="analytics-grid">
           <section class="card">
             <div class="card-head">
-              <div class="card-title">Карта стружколома (a<sub>p</sub> / f)</div>
+              <div class="card-title" id="chartCardTitle">Карта стружколома (a<sub>p</sub> / f)</div>
               <div class="card-subtitle" id="cbTitle" style="color:var(--accent);">—</div>
             </div>
             <div class="chart-wrap">
               <svg id="cbChart" class="cb-chart" viewBox="0 0 420 245"></svg>
             </div>
             <div class="chart-hint">
-              <span>Кликните по графику для настройки (f, a<sub>p</sub>)</span>
+              <span id="chartHintLeft">Кликните по графику для настройки (f, a<sub>p</sub>)</span>
               <span id="cbStatus">—</span>
             </div>
             <div id="xrefContainer" style="display:none;" class="xref-box"></div>
@@ -198,7 +268,7 @@
 
           <section class="card">
             <div class="card-head">
-              <div class="card-title">Физика Кинцле и лимиты станка</div>
+              <div class="card-title">Физика Кинцле, лимиты и экономика Тейлора</div>
               <div class="card-subtitle" id="vcTitle" style="color:var(--accent);">Vc: —</div>
             </div>
             <div class="kpi-grid">
@@ -206,8 +276,8 @@
               <div class="kpi"><div class="k-label">Сила резания F<sub>c</sub></div><div class="k-val" id="kFc">—</div><div class="k-sub" id="kKc">kc: — МПа</div></div>
               <div class="kpi"><div class="k-label">Съём металла (MRR)</div><div class="k-val" id="kMrr">—</div><div class="k-sub">см³/мин</div></div>
               <div class="kpi"><div class="k-label">Толщина стружки h<sub>m</sub></div><div class="k-val" id="kHm">—</div><div class="k-sub" id="kThin">утонение: 1.0x</div></div>
-              <div class="kpi"><div class="k-label">Шероховатость R<sub>a</sub></div><div class="k-val" id="kRa">—</div><div class="k-sub" id="kRaSub">теоретическая</div></div>
-              <div class="kpi"><div class="k-label">Прогиб оправки δ</div><div class="k-val" id="kDefl">—</div><div class="k-sub" id="kLd">L/D: —</div></div>
+              <div class="kpi"><div class="k-label" id="kRaLabel">Шероховатость R<sub>a</sub></div><div class="k-val" id="kRa">—</div><div class="k-sub" id="kRaSub">теоретическая</div></div>
+              <div class="kpi"><div class="k-label" id="kDeflLabel">Прогиб оправки δ</div><div class="k-val" id="kDefl">—</div><div class="k-sub" id="kLd">L/D: —</div></div>
             </div>
 
             <div class="load-bar">
@@ -221,6 +291,17 @@
             <div class="load-bar">
               <div class="load-bar-head"><span>Загрузка по оборотам (RPM)</span><span id="lblRpm">—</span></div>
               <div class="bar-track"><div class="bar-fill" id="barRpm" style="width:0%"></div></div>
+            </div>
+            <div class="load-bar" id="thrustBarWrap" style="display:none;">
+              <div class="load-bar-head"><span>Осевое усилие подачи (ось Z)</span><span id="lblThrust">—</span></div>
+              <div class="bar-track"><div class="bar-fill" id="barThrust" style="width:0%"></div></div>
+            </div>
+
+            <div class="econ-grid">
+              <div class="econ-pill"><div class="e-lbl">Стойкость кромки</div><div class="e-val" id="eLife">—</div></div>
+              <div class="econ-pill"><div class="e-lbl">Время реза / дет.</div><div class="e-val" id="eTime">—</div></div>
+              <div class="econ-pill"><div class="e-lbl">Деталей / кромка</div><div class="e-val" id="eParts">—</div></div>
+              <div class="econ-pill highlight"><div class="e-lbl">Себест. / деталь</div><div class="e-val" id="eTotal">—</div></div>
             </div>
 
             <div id="warningsBox" class="warnings-box ok">✓ Режимы в оптимальном окне.</div>
@@ -310,12 +391,31 @@
       <div class="card-head">
         <div class="card-title">Сохранённые наладки и экспорт в CAM / Excel</div>
         <div class="viewer3d-btns no-print">
-          <button class="v-btn accent" onclick="exportSetupsCSV()">⬇ Excel (CSV)</button>
-          <button class="v-btn" onclick="exportSetupsJSON()">⬇ ISO 13399 JSON</button>
+          <button class="v-btn accent" onclick="exportSetupsGTC()">⬇ GTC ISO 13399</button>
+          <button class="v-btn accent" onclick="exportSetupsFusion360()">⬇ Fusion 360 (.tools)</button>
+          <button class="v-btn" onclick="exportSetupsCSV()">⬇ Excel (CSV)</button>
+          <button class="v-btn" onclick="exportSetupsJSON()">⬇ JSON</button>
           <button class="v-btn" onclick="window.print()">🖨 Печать / PDF</button>
         </div>
       </div>
       <div id="setupsGrid" class="setups-grid"></div>
+    </section>
+  </section>
+
+  <!-- TAB 5: SHOP-FLOOR WAREHOUSE STOCK -->
+  <section id="tab-stock" class="tab-panel">
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title">Склад инструмента цеха (остатки, ячейки и реальные цены)</div>
+        <div class="viewer3d-btns">
+          <button class="v-btn accent" onclick="document.getElementById('stockCsvInput').click()">📂 Импорт CSV / Excel</button>
+          <input type="file" id="stockCsvInput" accept=".csv,.tsv,.txt" style="display:none;" onchange="handleStockCsvUpload(event)" />
+          <button class="v-btn" onclick="exportStockCSV()">⬇ Выгрузить CSV</button>
+          <button class="v-btn" onclick="resetStockDefaults()">↺ Сбросить демо-склад</button>
+        </div>
+      </div>
+      <div class="stock-summary" id="stockSummary"></div>
+      <div id="stockTableWrap" class="table-scroll"></div>
     </section>
   </section>
 </main>

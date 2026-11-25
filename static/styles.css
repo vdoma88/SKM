@@ -744,3 +744,69 @@ svg.cb-chart { width: 100%; height: 245px; display: block; cursor: crosshair; }
   .topbar, .nav-bar, .no-print, .toast, .modal-backdrop { display: none !important; }
   .card { box-shadow: none !important; border: 1px solid #ccc !important; break-inside: avoid; }
 }
+/* ==========================================================================
+   SKM v1.0 Additions: 4-Op Grid, Stock Badges, Economics Card & Warehouse Tab
+   ========================================================================== */
+.seg-btns.cols-4 { grid-template-columns: repeat(2, 1fr); }
+.switch-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; color: var(--text-soft); cursor: pointer;
+}
+.switch-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+.econ-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border);
+}
+.econ-pill {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px;
+}
+.econ-pill .e-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; }
+.econ-pill .e-val { font-size: 14px; font-weight: 800; font-family: var(--mono); color: var(--text); margin-top: 2px; }
+.econ-pill.highlight { border-color: var(--green); background: var(--green-soft); }
+.econ-pill.highlight .e-val { color: var(--green); }
+
+.stock-badge {
+  font-size: 10.5px; padding: 2px 7px; border-radius: 5px; font-weight: 700; font-family: var(--mono);
+  background: var(--green-soft); border: 1px solid color-mix(in srgb, var(--green) 45%, transparent); color: var(--green);
+}
+.stock-badge.out {
+  background: var(--surface); border-color: var(--border); color: var(--muted);
+}
+
+.stock-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 14px;
+}
+.stock-input-inline {
+  width: 78px !important; padding: 4px 6px !important; font-size: 12px !important; font-family: var(--mono) !important;
+}
+@media (max-width: 720px) {
+  .econ-grid { grid-template-columns: repeat(2, 1fr); }
+}
+/* ==========================================================================
+   SKM v1.1 Axial Tooling Styles
+   ========================================================================== */
+.axial-panel {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 10px;
+  padding: 11px 12px;
+  margin-bottom: 13px;
+}
+.axial-panel-title {
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--accent); margin-bottom: 9px; display: flex; justify-content: space-between; align-items: center;
+}
+.cycle-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 11.5px; font-weight: 800;
+  padding: 3px 9px; border-radius: 6px;
+  background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent);
+}
+.tag.axial-mod { border-color: #a78bfa; color: #c4b5fd; background: rgba(167, 139, 250, 0.14); }
+.tag.axial-sc  { border-color: #2dd4bf; color: #5eead4; background: rgba(45, 212, 191, 0.14); }
+.tag.axial-ud  { border-color: #38bdf8; color: #7dd3fc; background: rgba(56, 189, 248, 0.14); }
+[data-theme="light"] .tag.axial-mod { color: #6d28d9; }
+[data-theme="light"] .tag.axial-sc  { color: #0f766e; }
+[data-theme="light"] .tag.axial-ud  { color: #0369a1; }

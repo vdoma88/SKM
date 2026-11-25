@@ -12,7 +12,9 @@ from __future__ import annotations
 import logging
 import os
 from typing import Any, Dict, List, Optional
-from uuid import UUID
+import json
+from uuid import UUID, uuid4
+from app.inventory import DEFAULT_STOCK_ITEMS, normalize_iso_key
 
 try:
     import psycopg
@@ -47,9 +49,9 @@ SEED_DATA: Dict[str, Any] = {
         {"code": "H1", "iso_group": "H", "name_ru": "Закалённые стали 48–58 HRC (Х12МФ, ШХ15, D2)", "kc1_1_mpa": 3200.0, "mc_exponent": 0.300, "hb": "48–58 HRC"},
     ],
     "machines": [
-        {"id": "m1", "name": "Токарно-фрезерный центр (BMT55)", "machine_type": "TURN_MILL", "max_rpm": 4500, "spindle_power_kw": 18.5, "max_torque_nm": 320.0, "rigidity_class": "HIGH"},
-        {"id": "m2", "name": "Вертикальный фрезерный ОЦ (BT40)", "machine_type": "MILL_3AX", "max_rpm": 12000, "spindle_power_kw": 15.0, "max_torque_nm": 95.0, "rigidity_class": "MEDIUM"},
-        {"id": "m3", "name": "Универсальный токарный ЧПУ (лёгкий)", "machine_type": "LATHE", "max_rpm": 3000, "spindle_power_kw": 7.5, "max_torque_nm": 160.0, "rigidity_class": "LOW"},
+        {"id": "m1", "name": "Токарно-фрезерный центр (BMT55)", "machine_type": "TURN_MILL", "max_rpm": 4500, "spindle_power_kw": 18.5, "max_torque_nm": 320.0, "coolant_pressure_bar": 20.0, "max_thrust_kn": 28.0, "rigidity_class": "HIGH"},
+        {"id": "m2", "name": "Вертикальный фрезерный ОЦ (BT40)", "machine_type": "MILL_3AX", "max_rpm": 12000, "spindle_power_kw": 15.0, "max_torque_nm": 95.0, "coolant_pressure_bar": 25.0, "max_thrust_kn": 20.0, "rigidity_class": "MEDIUM"},
+        {"id": "m3", "name": "Универсальный токарный ЧПУ (лёгкий)", "machine_type": "LATHE", "max_rpm": 3000, "spindle_power_kw": 7.5, "max_torque_nm": 160.0, "coolant_pressure_bar": 10.0, "max_thrust_kn": 12.0, "rigidity_class": "LOW"},
     ],
     "inserts": [
         # --- TURNING (10) ---
@@ -320,7 +322,8 @@ SEED_DATA: Dict[str, Any] = {
             "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED",
             "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.06, "fn_max_mm": 0.16,
             "operating_zone_polygon": [],
-            "holders": [{"code": "UDRL-WCMX05-D26-3D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 26.0, "z": 1, "clamping": "SCREW"}],
+            "axial_subtype": "INDEXABLE_U_DRILL", "point_angle_deg": 180.0, "ld_ratio_max": 3.0, "tolerance_hole": "IT11",
+            "holders": [{"code": "UDRL-WCMX05-D26-3D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 26.0, "z": 1, "ld_ratio_max": 3.0, "clamping": "SCREW"}],
             "recommendations": {
                 "P1": {"vc": 160.0, "vc_min": 120.0, "vc_max": 200.0, "feed": 0.11, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
                 "P2": {"vc": 135.0, "vc_min": 100.0, "vc_max": 170.0, "feed": 0.09, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
@@ -338,7 +341,8 @@ SEED_DATA: Dict[str, Any] = {
             "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED",
             "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.06, "fn_max_mm": 0.16,
             "operating_zone_polygon": [],
-            "holders": [{"code": "UDRL-SPMG07-D22-4D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 22.0, "z": 1, "clamping": "SCREW"}],
+            "axial_subtype": "INDEXABLE_U_DRILL", "point_angle_deg": 180.0, "ld_ratio_max": 4.0, "tolerance_hole": "IT11",
+            "holders": [{"code": "UDRL-SPMG07-D22-4D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 22.0, "z": 1, "ld_ratio_max": 4.0, "clamping": "SCREW"}],
             "recommendations": {
                 "P1": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
                 "P2": {"vc": 155.0, "vc_min": 115.0, "vc_max": 195.0, "feed": 0.10, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
@@ -358,13 +362,254 @@ SEED_DATA: Dict[str, Any] = {
             "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED",
             "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.06, "fn_max_mm": 0.16,
             "operating_zone_polygon": [],
-            "holders": [{"code": "UDRL-SPMG09-D32-3D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 32.0, "z": 1, "clamping": "SCREW"}],
+            "axial_subtype": "INDEXABLE_U_DRILL", "point_angle_deg": 180.0, "ld_ratio_max": 3.0, "tolerance_hole": "IT11",
+            "holders": [{"code": "UDRL-SPMG09-D32-3D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 32.0, "z": 1, "ld_ratio_max": 3.0, "clamping": "SCREW"}],
             "recommendations": {
                 "P1": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
                 "P2": {"vc": 155.0, "vc_min": 115.0, "vc_max": 195.0, "feed": 0.10, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
                 "M1": {"vc": 120.0, "vc_min": 90.0, "vc_max": 150.0, "feed": 0.09, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
                 "K1": {"vc": 200.0, "vc_min": 150.0, "vc_max": 250.0, "feed": 0.14, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
                 "S2": {"vc": 50.0, "vc_min": 35.0, "vc_max": 65.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-18", "iso_code": "TNMG 160408", "operation_domain": "TURNING",
+            "shape_code": "T", "clearance_angle_deg": 0.0, "ic_mm": 9.525, "thickness_mm": 4.76, "corner_radius_mm": 0.8,
+            "cutting_edges_count": 6, "is_double_sided": True, "has_wiper_geometry": False,
+            "seat_pocket_signature": "T-N-953-476-G", "relative_cost_index": 0.88,
+            "grade_code": "GEN-P25-CVD", "coating_method": "CVD", "coating_composition": "TiCN-Al2O3-TiN",
+            "toughness_index": 6, "wear_resistance_index": 8,
+            "suitability": {"P": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-PM", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.8, "ap_max_mm": 4.5, "fn_min_mm": 0.15, "fn_max_mm": 0.45,
+            "operating_zone_polygon": [[0.15, 1.0], [0.22, 0.8], [0.45, 1.2], [0.42, 4.5], [0.20, 4.0], [0.15, 2.2]],
+            "holders": [{"code": "PTJNR 2525M 16", "category": "TURNING_EXTERNAL", "lead_angle_deg": 93.0, "clamping": "LEVER"}],
+            "recommendations": {
+                "P1": {"vc": 290.0, "vc_min": 220.0, "vc_max": 360.0, "feed": 0.30, "ap": 2.5, "coolant": "FLOOD"},
+                "P2": {"vc": 240.0, "vc_min": 180.0, "vc_max": 300.0, "feed": 0.28, "ap": 2.2, "coolant": "FLOOD"},
+                "P3": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.24, "ap": 2.0, "coolant": "FLOOD"},
+                "K1": {"vc": 260.0, "vc_min": 200.0, "vc_max": 320.0, "feed": 0.32, "ap": 2.5, "coolant": "DRY"},
+            },
+        },
+        {
+            "id": "ins-19", "iso_code": "CCGT 09T304-AL", "operation_domain": "TURNING",
+            "shape_code": "C", "clearance_angle_deg": 7.0, "ic_mm": 9.525, "thickness_mm": 3.97, "corner_radius_mm": 0.4,
+            "cutting_edges_count": 2, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "C-C-953-397-T", "relative_cost_index": 1.02,
+            "grade_code": "GEN-N10-UNC", "coating_method": "UNCOATED", "coating_composition": "Polished Submicron",
+            "toughness_index": 7, "wear_resistance_index": 7,
+            "suitability": {"N": "PRIMARY"},
+            "chipbreaker_code": "GEN-MF", "application_class": "FINISHING", "edge_prep": "SHARP",
+            "ap_min_mm": 0.25, "ap_max_mm": 2.0, "fn_min_mm": 0.08, "fn_max_mm": 0.25,
+            "operating_zone_polygon": [[0.08, 0.3], [0.15, 0.25], [0.25, 0.4], [0.22, 2.0], [0.10, 1.6]],
+            "holders": [{"code": "S20R-SCLCR 09", "category": "BORING_BAR", "lead_angle_deg": 95.0, "clamping": "SCREW"}],
+            "recommendations": {
+                "N1": {"vc": 700.0, "vc_min": 450.0, "vc_max": 1000.0, "feed": 0.18, "ap": 1.2, "coolant": "FLOOD"},
+                "N2": {"vc": 320.0, "vc_min": 220.0, "vc_max": 450.0, "feed": 0.16, "ap": 1.0, "coolant": "FLOOD"},
+            },
+        },
+        # --- GROOVING & THREADING (2) ---
+        {
+            "id": "ins-20", "iso_code": "MGMN 300", "operation_domain": "GROOVING_THREADING",
+            "shape_code": "L", "clearance_angle_deg": 0.0, "ic_mm": 3.0, "thickness_mm": 4.76, "corner_radius_mm": 0.2,
+            "cutting_edges_count": 2, "is_double_sided": True, "has_wiper_geometry": False,
+            "seat_pocket_signature": "L-N-300-476-N", "relative_cost_index": 0.98,
+            "grade_code": "GEN-M25-PVD", "coating_method": "PVD", "coating_composition": "AlTiN",
+            "toughness_index": 8, "wear_resistance_index": 6,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "S": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-GRV", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 1.5, "ap_max_mm": 4.0, "fn_min_mm": 0.05, "fn_max_mm": 0.22,
+            "operating_zone_polygon": [[0.05, 1.5], [0.22, 2.0], [0.20, 4.0], [0.05, 3.8]],
+            "holders": [{"code": "MGEHR 2525-3", "category": "GROOVING_HOLDER", "lead_angle_deg": 90.0, "clamping": "TOP_CLAMP"}],
+            "recommendations": {
+                "P1": {"vc": 150.0, "vc_min": 110.0, "vc_max": 190.0, "feed": 0.10, "ap": 3.0, "coolant": "FLOOD"},
+                "P2": {"vc": 125.0, "vc_min": 90.0, "vc_max": 160.0, "feed": 0.09, "ap": 3.0, "coolant": "FLOOD"},
+                "M1": {"vc": 115.0, "vc_min": 80.0, "vc_max": 145.0, "feed": 0.08, "ap": 3.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 45.0, "vc_min": 30.0, "vc_max": 60.0, "feed": 0.07, "ap": 3.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-21", "iso_code": "16ER AG60", "operation_domain": "GROOVING_THREADING",
+            "shape_code": "T", "clearance_angle_deg": 0.0, "ic_mm": 9.525, "thickness_mm": 3.97, "corner_radius_mm": 0.1,
+            "cutting_edges_count": 3, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "T-N-953-397-T", "relative_cost_index": 1.22,
+            "grade_code": "GEN-M25-PVD", "coating_method": "PVD", "coating_composition": "AlTiN",
+            "toughness_index": 8, "wear_resistance_index": 6,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "S": "PRIMARY", "K": "SECONDARY"},
+            "chipbreaker_code": "GEN-GRV", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.5, "ap_max_mm": 3.0, "fn_min_mm": 0.05, "fn_max_mm": 0.25,
+            "operating_zone_polygon": [[0.05, 0.5], [0.25, 0.8], [0.22, 3.0], [0.05, 2.8]],
+            "holders": [{"code": "SER 2525M 16", "category": "GROOVING_HOLDER", "lead_angle_deg": 90.0, "clamping": "SCREW"}],
+            "recommendations": {
+                "P1": {"vc": 145.0, "vc_min": 100.0, "vc_max": 180.0, "feed": 0.12, "ap": 1.5, "coolant": "FLOOD"},
+                "P2": {"vc": 120.0, "vc_min": 85.0, "vc_max": 155.0, "feed": 0.10, "ap": 1.5, "coolant": "FLOOD"},
+                "M1": {"vc": 105.0, "vc_min": 75.0, "vc_max": 135.0, "feed": 0.10, "ap": 1.5, "coolant": "FLOOD"},
+                "S2": {"vc": 40.0, "vc_min": 28.0, "vc_max": 55.0, "feed": 0.08, "ap": 1.2, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        # --- EXTENDED AXIAL TOOLING (8 new tools) ---
+        {
+            "id": "ins-22", "iso_code": "SOMT 11T308", "operation_domain": "DRILLING",
+            "shape_code": "S", "clearance_angle_deg": 11.0, "ic_mm": 11.0, "thickness_mm": 3.97, "corner_radius_mm": 0.8,
+            "cutting_edges_count": 4, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "S-O-1100-397-T", "relative_cost_index": 1.45,
+            "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN",
+            "toughness_index": 8, "wear_resistance_index": 7,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "S": "SECONDARY"},
+            "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.08, "fn_max_mm": 0.18,
+            "operating_zone_polygon": [],
+            "axial_subtype": "INDEXABLE_U_DRILL", "point_angle_deg": 180.0, "ld_ratio_max": 3.0, "tolerance_hole": "IT11",
+            "holders": [{"code": "UDRL-SOMT11-D40-3D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 40.0, "z": 1, "ld_ratio_max": 3.0, "clamping": "SCREW"}],
+            "recommendations": {
+                "P1": {"vc": 185.0, "vc_min": 140.0, "vc_max": 230.0, "feed": 0.14, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 155.0, "vc_min": 115.0, "vc_max": 195.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 120.0, "vc_min": 90.0, "vc_max": 150.0, "feed": 0.10, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 200.0, "vc_min": 150.0, "vc_max": 250.0, "feed": 0.16, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 48.0, "vc_min": 35.0, "vc_max": 62.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-23", "iso_code": "WCMT 06T308", "operation_domain": "DRILLING",
+            "shape_code": "W", "clearance_angle_deg": 7.0, "ic_mm": 9.525, "thickness_mm": 3.97, "corner_radius_mm": 0.8,
+            "cutting_edges_count": 3, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "W-C-953-397-T", "relative_cost_index": 1.35,
+            "grade_code": "GEN-DRL-CORE", "coating_method": "PVD", "coating_composition": "TiAlN",
+            "toughness_index": 9, "wear_resistance_index": 6,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "SECONDARY", "N": "SECONDARY"},
+            "chipbreaker_code": "GEN-DRL", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.06, "fn_max_mm": 0.16,
+            "operating_zone_polygon": [],
+            "axial_subtype": "INDEXABLE_U_DRILL", "point_angle_deg": 180.0, "ld_ratio_max": 5.0, "tolerance_hole": "IT11",
+            "holders": [{"code": "UDRL-WCMT06-D30-5D", "category": "INDEXABLE_DRILL", "lead_angle_deg": 90.0, "dc_mm": 30.0, "z": 1, "ld_ratio_max": 5.0, "clamping": "SCREW"}],
+            "recommendations": {
+                "P1": {"vc": 165.0, "vc_min": 120.0, "vc_max": 205.0, "feed": 0.11, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 135.0, "vc_min": 100.0, "vc_max": 170.0, "feed": 0.10, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 110.0, "vc_min": 80.0, "vc_max": 140.0, "feed": 0.08, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 180.0, "vc_min": 135.0, "vc_max": 220.0, "feed": 0.13, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "N1": {"vc": 320.0, "vc_min": 220.0, "vc_max": 420.0, "feed": 0.14, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-24", "iso_code": "MOD-DRL-140", "operation_domain": "DRILLING",
+            "shape_code": "DRL", "clearance_angle_deg": 11.0, "ic_mm": 14.0, "thickness_mm": 6.72, "corner_radius_mm": 0.2,
+            "cutting_edges_count": 2, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "DRL-M-1400-672-B", "relative_cost_index": 3.80,
+            "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN",
+            "toughness_index": 8, "wear_resistance_index": 8,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "S": "SECONDARY"},
+            "chipbreaker_code": "GEN-DRL-MOD", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.14, "fn_max_mm": 0.34,
+            "operating_zone_polygon": [],
+            "axial_subtype": "MODULAR_TIP", "point_angle_deg": 140.0, "ld_ratio_max": 5.0, "tolerance_hole": "IT9",
+            "holders": [{"code": "MOD-BODY-D14-5D", "category": "MODULAR_DRILL", "lead_angle_deg": 70.0, "dc_mm": 14.0, "z": 2, "ld_ratio_max": 5.0, "clamping": "BAYONET"}],
+            "recommendations": {
+                "P1": {"vc": 120.0, "vc_min": 90.0, "vc_max": 150.0, "feed": 0.24, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 100.0, "vc_min": 75.0, "vc_max": 130.0, "feed": 0.22, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 70.0, "vc_min": 50.0, "vc_max": 90.0, "feed": 0.18, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 135.0, "vc_min": 100.0, "vc_max": 170.0, "feed": 0.30, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 38.0, "vc_min": 25.0, "vc_max": 50.0, "feed": 0.14, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-25", "iso_code": "MOD-DRL-200", "operation_domain": "DRILLING",
+            "shape_code": "DRL", "clearance_angle_deg": 11.0, "ic_mm": 20.0, "thickness_mm": 9.60, "corner_radius_mm": 0.2,
+            "cutting_edges_count": 2, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "DRL-M-2000-960-B", "relative_cost_index": 4.90,
+            "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN",
+            "toughness_index": 8, "wear_resistance_index": 8,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "S": "SECONDARY"},
+            "chipbreaker_code": "GEN-DRL-MOD", "application_class": "MEDIUM", "edge_prep": "HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.16, "fn_max_mm": 0.38,
+            "operating_zone_polygon": [],
+            "axial_subtype": "MODULAR_TIP", "point_angle_deg": 140.0, "ld_ratio_max": 8.0, "tolerance_hole": "IT9",
+            "holders": [{"code": "MOD-BODY-D20-8D", "category": "MODULAR_DRILL", "lead_angle_deg": 70.0, "dc_mm": 20.0, "z": 2, "ld_ratio_max": 8.0, "clamping": "BAYONET"}],
+            "recommendations": {
+                "P1": {"vc": 115.0, "vc_min": 85.0, "vc_max": 145.0, "feed": 0.26, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 95.0, "vc_min": 70.0, "vc_max": 125.0, "feed": 0.24, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 65.0, "vc_min": 45.0, "vc_max": 85.0, "feed": 0.19, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 130.0, "vc_min": 95.0, "vc_max": 165.0, "feed": 0.32, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 36.0, "vc_min": 25.0, "vc_max": 48.0, "feed": 0.15, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-26", "iso_code": "SC-DRL-080-5D", "operation_domain": "DRILLING",
+            "shape_code": "DRL", "clearance_angle_deg": 11.0, "ic_mm": 8.0, "thickness_mm": 5.00, "corner_radius_mm": 0.1,
+            "cutting_edges_count": 2, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "DRL-S-800-500-I", "relative_cost_index": 4.20,
+            "grade_code": "GEN-PM30-MILL", "coating_method": "PVD", "coating_composition": "TiAlSiN",
+            "toughness_index": 8, "wear_resistance_index": 8,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "S": "SECONDARY"},
+            "chipbreaker_code": "GEN-DRL-SC", "application_class": "MEDIUM", "edge_prep": "CHAMFERED_HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.10, "fn_max_mm": 0.28,
+            "operating_zone_polygon": [],
+            "axial_subtype": "SOLID_CARBIDE", "point_angle_deg": 140.0, "ld_ratio_max": 5.0, "tolerance_hole": "IT8",
+            "holders": [{"code": "HYD-CHUCK-D08-5D", "category": "SOLID_CARBIDE_DRILL", "lead_angle_deg": 70.0, "dc_mm": 8.0, "z": 2, "ld_ratio_max": 5.0, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "P1": {"vc": 115.0, "vc_min": 85.0, "vc_max": 145.0, "feed": 0.20, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 95.0, "vc_min": 70.0, "vc_max": 120.0, "feed": 0.18, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 65.0, "vc_min": 45.0, "vc_max": 85.0, "feed": 0.15, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 130.0, "vc_min": 95.0, "vc_max": 165.0, "feed": 0.24, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 38.0, "vc_min": 25.0, "vc_max": 50.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-27", "iso_code": "SC-DRL-120-8D", "operation_domain": "DRILLING",
+            "shape_code": "DRL", "clearance_angle_deg": 11.0, "ic_mm": 12.0, "thickness_mm": 8.00, "corner_radius_mm": 0.1,
+            "cutting_edges_count": 2, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "DRL-S-1200-800-I", "relative_cost_index": 6.40,
+            "grade_code": "GEN-DRL-UNIV", "coating_method": "PVD", "coating_composition": "AlCrN-TiAlN",
+            "toughness_index": 8, "wear_resistance_index": 8,
+            "suitability": {"P": "PRIMARY", "M": "PRIMARY", "K": "PRIMARY", "S": "SECONDARY"},
+            "chipbreaker_code": "GEN-DRL-SC", "application_class": "MEDIUM", "edge_prep": "CHAMFERED_HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.12, "fn_max_mm": 0.28,
+            "operating_zone_polygon": [],
+            "axial_subtype": "SOLID_CARBIDE", "point_angle_deg": 140.0, "ld_ratio_max": 8.0, "tolerance_hole": "IT8",
+            "holders": [{"code": "HYD-CHUCK-D12-8D", "category": "SOLID_CARBIDE_DRILL", "lead_angle_deg": 70.0, "dc_mm": 12.0, "z": 2, "ld_ratio_max": 8.0, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "P1": {"vc": 105.0, "vc_min": 80.0, "vc_max": 130.0, "feed": 0.22, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "P2": {"vc": 88.0, "vc_min": 65.0, "vc_max": 110.0, "feed": 0.19, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 60.0, "vc_min": 45.0, "vc_max": 80.0, "feed": 0.16, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "K1": {"vc": 120.0, "vc_min": 90.0, "vc_max": 150.0, "feed": 0.25, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 34.0, "vc_min": 24.0, "vc_max": 45.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-28", "iso_code": "SC-DRL-100-AL", "operation_domain": "DRILLING",
+            "shape_code": "DRL", "clearance_angle_deg": 11.0, "ic_mm": 10.0, "thickness_mm": 5.00, "corner_radius_mm": 0.1,
+            "cutting_edges_count": 2, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "DRL-S-1000-500-I", "relative_cost_index": 4.60,
+            "grade_code": "GEN-N10-UNC", "coating_method": "UNCOATED", "coating_composition": "Polished Submicron",
+            "toughness_index": 7, "wear_resistance_index": 7,
+            "suitability": {"N": "PRIMARY"},
+            "chipbreaker_code": "GEN-DRL-AL", "application_class": "ALUMINUM_SHARP", "edge_prep": "SHARP",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.12, "fn_max_mm": 0.38,
+            "operating_zone_polygon": [],
+            "axial_subtype": "SOLID_CARBIDE", "point_angle_deg": 130.0, "ld_ratio_max": 5.0, "tolerance_hole": "IT8",
+            "holders": [{"code": "HYD-CHUCK-D10-5D", "category": "SOLID_CARBIDE_DRILL", "lead_angle_deg": 65.0, "dc_mm": 10.0, "z": 2, "ld_ratio_max": 5.0, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "N1": {"vc": 260.0, "vc_min": 180.0, "vc_max": 360.0, "feed": 0.26, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "N2": {"vc": 160.0, "vc_min": 110.0, "vc_max": 220.0, "feed": 0.20, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+            },
+        },
+        {
+            "id": "ins-29", "iso_code": "SC-DRL-060-H", "operation_domain": "DRILLING",
+            "shape_code": "DRL", "clearance_angle_deg": 11.0, "ic_mm": 6.0, "thickness_mm": 5.00, "corner_radius_mm": 0.1,
+            "cutting_edges_count": 2, "is_double_sided": False, "has_wiper_geometry": False,
+            "seat_pocket_signature": "DRL-S-600-500-I", "relative_cost_index": 4.90,
+            "grade_code": "GEN-S15-PVD", "coating_method": "PVD", "coating_composition": "AlTiSiN-Nano",
+            "toughness_index": 7, "wear_resistance_index": 9,
+            "suitability": {"H": "PRIMARY", "S": "PRIMARY", "M": "SECONDARY"},
+            "chipbreaker_code": "GEN-DRL-SC", "application_class": "MEDIUM", "edge_prep": "CHAMFERED_HONED",
+            "ap_min_mm": 0.0, "ap_max_mm": 0.0, "fn_min_mm": 0.05, "fn_max_mm": 0.16,
+            "operating_zone_polygon": [],
+            "axial_subtype": "SOLID_CARBIDE", "point_angle_deg": 140.0, "ld_ratio_max": 5.0, "tolerance_hole": "IT8",
+            "holders": [{"code": "SHRINK-FIT-D06-5D", "category": "SOLID_CARBIDE_DRILL", "lead_angle_deg": 70.0, "dc_mm": 6.0, "z": 2, "ld_ratio_max": 5.0, "clamping": "INTEGRAL"}],
+            "recommendations": {
+                "H1": {"vc": 32.0, "vc_min": 20.0, "vc_max": 45.0, "feed": 0.09, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S1": {"vc": 22.0, "vc_min": 15.0, "vc_max": 32.0, "feed": 0.10, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "S2": {"vc": 42.0, "vc_min": 28.0, "vc_max": 58.0, "feed": 0.12, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
+                "M1": {"vc": 62.0, "vc_min": 45.0, "vc_max": 82.0, "feed": 0.13, "ap": 0.0, "coolant": "HIGH_PRESSURE_THROUGH"},
             },
         },
     ],
@@ -376,6 +621,12 @@ SEED_DATA: Dict[str, Any] = {
         {"source_insert_id": "ins-7", "target_insert_id": "ins-8",  "match_type": "HIGHER_TOUGHNESS",      "confidence_score": 0.95, "notes": "То же гнездо PWLNR 08; усиленный черновой стружколом и сплав P35"},
         {"source_insert_id": "ins-9", "target_insert_id": "ins-10", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.80, "notes": "Переход с 55° (DNMG) на 35° (VNMG) для сложного профилирования"},
         {"source_insert_id": "ins-6", "target_insert_id": "ins-16", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.86, "notes": "SPMG 07T308 даёт 4 кромки вместо 3 у WCMX (корпус UDRL-SPMG07)"},
+        {"source_insert_id": "ins-1", "target_insert_id": "ins-18", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.84, "notes": "TNMG 160408: 6 кромок и минимальная цена за кромку для нежёстких валов"},
+        {"source_insert_id": "ins-3", "target_insert_id": "ins-19", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.96, "notes": "Та же оправка S20R-SCLCR 09; полированная шлифованная CCGT для алюминия"},
+        {"source_insert_id": "ins-17", "target_insert_id": "ins-22", "match_type": "HIGHER_TOUGHNESS",      "confidence_score": 0.90, "notes": "SOMT 11T308 для мощных отверстий Ø40 мм с усиленной квадратной кромкой"},
+        {"source_insert_id": "ins-6",  "target_insert_id": "ins-23", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.88, "notes": "WCMT 06T308 позволяет сверлить до 5xD вместо 3xD (корпус UDRL-WCMT06-D30-5D)"},
+        {"source_insert_id": "ins-24", "target_insert_id": "ins-27", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.86, "notes": "Переход со сменной коронки Ø14 на монолит Ø12 8xD для точности IT8 и глубоких отверстий"},
+        {"source_insert_id": "ins-25", "target_insert_id": "ins-16", "match_type": "FUNCTIONAL_EQUIVALENT", "confidence_score": 0.82, "notes": "Альтернатива Ø20–22 мм: U-сверло SPMG 07T308 дешевле на кромку при глубине до 4xD"},
     ],
 }
 
@@ -405,6 +656,12 @@ class ToolingRepository:
                 "Install it via: pip install 'psycopg[binary]>=3.2.0'"
             )
         self.mode = "postgres" if self.db_url else "memory_seed"
+        self._stock_items: List[Dict[str, Any]] = [
+            {**item, "normalized_code": normalize_iso_key(item["iso_code"])}
+            for item in DEFAULT_STOCK_ITEMS
+        ]
+        self._custom_machines: List[Dict[str, Any]] = []
+        self._saved_assemblies: List[Dict[str, Any]] = []
 
     def _connect(self):
         assert self.db_url is not None and psycopg is not None
@@ -416,7 +673,7 @@ class ToolingRepository:
                 "storage_mode": self.mode,
                 "iso_groups": SEED_DATA["iso_groups"],
                 "material_subgroups": SEED_DATA["material_subgroups"],
-                "machines": SEED_DATA["machines"],
+                "machines": SEED_DATA["machines"] + self._custom_machines,
             }
 
         with self._connect() as conn, conn.cursor() as cur:
@@ -530,7 +787,7 @@ class ToolingRepository:
 
     def get_machine(self, machine_id: str) -> Optional[Dict[str, Any]]:
         if self.mode != "postgres":
-            for m in SEED_DATA["machines"]:
+            for m in SEED_DATA["machines"] + self._custom_machines:
                 if m["id"] == machine_id:
                     return m
             return SEED_DATA["machines"][0] if SEED_DATA["machines"] else None
@@ -693,7 +950,8 @@ class ToolingRepository:
                     th.clamping_system::text AS clamping,
                     th.lead_angle_deg,
                     th.cutting_diameter_mm,
-                    th.effective_teeth_count
+                    th.effective_teeth_count,
+                    th.ld_ratio_max
                 FROM holder_insert_compatibility hic
                 JOIN tool_holders th ON th.id = hic.holder_id
                 WHERE hic.seat_pocket_signature = ANY(%s)
@@ -750,6 +1008,7 @@ class ToolingRepository:
                         "lead_angle_deg": float(hr["lead_angle_deg"]) if hr["lead_angle_deg"] is not None else 90.0,
                         "dc_mm": float(hr["cutting_diameter_mm"]) if hr["cutting_diameter_mm"] is not None else None,
                         "z": int(hr["effective_teeth_count"]) if hr["effective_teeth_count"] is not None else 1,
+                        "ld_ratio_max": float(hr["ld_ratio_max"]) if hr.get("ld_ratio_max") is not None else None,
                         "clamping": hr["clamping"],
                         "seat_position": hr["seat_position"],
                         "inserts_required_qty": int(hr["inserts_required_qty"]),
@@ -846,3 +1105,163 @@ class ToolingRepository:
                 }
                 for r in cur.fetchall()
             ]
+
+    # -------------------------------------------------------------------------
+    # Warehouse Stock, Custom Machines & Saved Tool Assemblies CRUD
+    # -------------------------------------------------------------------------
+
+    def list_stock(self) -> List[Dict[str, Any]]:
+        return list(self._stock_items)
+
+    def replace_stock(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        normalized: List[Dict[str, Any]] = []
+        for item in items:
+            code = str(item.get("iso_code", "")).strip().upper()
+            if not code:
+                continue
+            normalized.append(
+                {
+                    "iso_code": code,
+                    "normalized_code": normalize_iso_key(code),
+                    "grade_code": item.get("grade_code") or None,
+                    "qty": max(0, int(item.get("qty", 0))),
+                    "unit_price_rub": round(max(0.0, float(item.get("unit_price_rub", 650.0))), 2),
+                    "bin_location": str(item.get("bin_location", "")),
+                    "supplier": str(item.get("supplier", "")),
+                }
+            )
+        self._stock_items = normalized
+        return list(self._stock_items)
+
+    def get_stock_match(self, iso_code: str, grade_code: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        norm = normalize_iso_key(iso_code)
+        exact_grade = None
+        fallback = None
+        for item in self._stock_items:
+            if item["normalized_code"] != norm:
+                continue
+            if grade_code and item.get("grade_code") == grade_code:
+                exact_grade = item
+                break
+            if fallback is None:
+                fallback = item
+        return exact_grade or fallback
+
+    def create_machine(self, machine: Dict[str, Any]) -> Dict[str, Any]:
+        if self.mode != "postgres":
+            rec = {
+                "id": f"custom-{uuid4().hex[:8]}",
+                "name": machine["name"],
+                "machine_type": machine.get("machine_type", "TURN_MILL"),
+                "max_rpm": int(machine["max_rpm"]),
+                "spindle_power_kw": float(machine["spindle_power_kw"]),
+                "max_torque_nm": float(machine["max_torque_nm"]),
+                "rigidity_class": machine.get("rigidity_class", "MEDIUM"),
+            }
+            self._custom_machines.append(rec)
+            return rec
+
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO machine_profiles (
+                    name, machine_type, max_rpm, spindle_power_kw, max_torque_nm, spindle_interface, rigidity_class
+                ) VALUES (%s, %s::machine_type_enum, %s, %s, %s, %s, %s)
+                RETURNING id::text AS id, name, machine_type::text AS machine_type, max_rpm, spindle_power_kw, max_torque_nm, rigidity_class
+                """,
+                (
+                    machine["name"],
+                    machine.get("machine_type", "TURN_MILL"),
+                    int(machine["max_rpm"]),
+                    float(machine["spindle_power_kw"]),
+                    float(machine["max_torque_nm"]),
+                    machine.get("spindle_interface", "BT40"),
+                    machine.get("rigidity_class", "MEDIUM"),
+                ),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return {
+                "id": row["id"],
+                "name": row["name"],
+                "machine_type": row["machine_type"],
+                "max_rpm": int(row["max_rpm"]),
+                "spindle_power_kw": float(row["spindle_power_kw"]),
+                "max_torque_nm": float(row["max_torque_nm"]),
+                "rigidity_class": row["rigidity_class"],
+            }
+
+    def list_assemblies(self) -> List[Dict[str, Any]]:
+        if self.mode != "postgres":
+            return list(self._saved_assemblies)
+
+        with self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    uta.id::text AS id,
+                    uta.assembly_name AS name,
+                    uta.overhang_mm,
+                    uta.saved_cutting_params AS params,
+                    uta.created_at::text AS created_at,
+                    ci.iso_code,
+                    ci.seat_pocket_signature,
+                    th.code AS holder_code,
+                    mp.name AS machine_name
+                FROM user_tool_assemblies uta
+                JOIN cutting_inserts ci ON ci.id = uta.primary_insert_id
+                JOIN tool_holders th ON th.id = uta.holder_id
+                LEFT JOIN machine_profiles mp ON mp.id = uta.machine_id
+                ORDER BY uta.created_at DESC
+                """
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+    def create_assembly(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        rec = {
+            "id": f"asm-{uuid4().hex[:8]}",
+            **payload,
+        }
+        if self.mode != "postgres":
+            self._saved_assemblies.insert(0, rec)
+            return rec
+
+        # Persist to user_tool_assemblies if valid UUIDs are provided, otherwise keep session copy
+        ins_id = payload.get("primary_insert_id", "")
+        hld_id = payload.get("holder_id", "")
+        mach_id = payload.get("machine_id")
+        if _is_valid_uuid(ins_id) and _is_valid_uuid(hld_id):
+            with self._connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO user_tool_assemblies (
+                        assembly_name, machine_id, holder_id, primary_insert_id, overhang_mm, saved_cutting_params
+                    ) VALUES (%s, %s::uuid, %s::uuid, %s::uuid, %s, %s::jsonb)
+                    RETURNING id::text AS id
+                    """,
+                    (
+                        payload.get("name", "Наладка"),
+                        mach_id if (mach_id and _is_valid_uuid(mach_id)) else None,
+                        hld_id,
+                        ins_id,
+                        payload.get("overhang_mm"),
+                        json.dumps(payload.get("params", {})),
+                    ),
+                )
+                row = cur.fetchone()
+                conn.commit()
+                rec["id"] = row["id"]
+                return rec
+        self._saved_assemblies.insert(0, rec)
+        return rec
+
+    def delete_assembly(self, assembly_id: str) -> bool:
+        if self.mode == "postgres" and _is_valid_uuid(assembly_id):
+            with self._connect() as conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM user_tool_assemblies WHERE id = %s::uuid", (assembly_id,))
+                deleted = cur.rowcount > 0
+                conn.commit()
+                return deleted
+        before = len(self._saved_assemblies)
+        self._saved_assemblies = [a for a in self._saved_assemblies if a["id"] != assembly_id]
+        return len(self._saved_assemblies) < before

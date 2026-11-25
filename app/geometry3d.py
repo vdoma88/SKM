@@ -232,11 +232,96 @@ def _append_tri(
     normals.extend([nx, ny, nz, nx, ny, nz, nx, ny, nz])
 
 
+def _build_axial_drill_mesh(parsed: ISO1832Parsed) -> InsertMesh3D:
+    """Builds a watertight 3D 2-flute helical axial drill / modular crown mesh with 140° conical point."""
+    dc = parsed.ic_mm or 12.0
+    r_outer = dc / 2.0
+    is_solid = parsed.normalized_code.startswith("SCDRL")
+    body_h = min(dc * 2.6, 36.0) if is_solid else max(dc * 0.65, 6.0)
+    point_deg = 130.0 if (parsed.suffix == "AL") else 140.0
+    tip_h = r_outer / math.tan(math.radians(point_deg / 2.0))
+
+    n_seg = 48
+    n_stacks = 12 if is_solid else 5
+    twist_total = math.radians(150.0 if is_solid else 35.0)
+    z_base = -body_h / 2.0
+    z_shld = body_h / 2.0
+    z_apex = z_shld + tip_h
+
+    def ring_pts(z_val: float, frac: float, radius_scale: float = 1.0) -> List[Tuple[float, float, float]]:
+        twist = twist_total * frac
+        pts: List[Tuple[float, float, float]] = []
+        for k in range(n_seg):
+            ang = 2.0 * math.pi * k / n_seg
+            # 2-flute radial profile: deep smooth chip flutes at 0 and pi
+            flute_phase = math.cos(2.0 * (ang - twist))
+            flute_factor = 0.72 + 0.28 * flute_phase if flute_phase < 0.25 else 1.0
+            rad = r_outer * radius_scale * flute_factor
+            pts.append((rad * math.cos(ang), rad * math.sin(ang), z_val))
+        return pts
+
+    positions: List[float] = []
+    normals: List[float] = []
+
+    rings = [ring_pts(z_base + body_h * (st / n_stacks), st / n_stacks, 1.0) for st in range(n_stacks + 1)]
+    for st in range(n_stacks):
+        r0 = rings[st]
+        r1 = rings[st + 1]
+        for i in range(n_seg):
+            j = (i + 1) % n_seg
+            _append_tri(positions, normals, r0[i], r0[j], r1[j])
+            _append_tri(positions, normals, r0[i], r1[j], r1[i])
+
+    # Conical drill point (top ring -> apex)
+    top_ring = rings[-1]
+    apex = (0.0, 0.0, z_apex)
+    for i in range(n_seg):
+        j = (i + 1) % n_seg
+        _append_tri(positions, normals, top_ring[i], top_ring[j], apex)
+
+    # Flat base cap (-Z normal)
+    bot_ring = rings[0]
+    c_bot = (0.0, 0.0, z_base)
+    for i in range(n_seg):
+        j = (i + 1) % n_seg
+        _append_tri(positions, normals, c_bot, bot_ring[j], bot_ring[i])
+
+    xs = positions[0::3]
+    ys = positions[1::3]
+    zs = positions[2::3]
+    bbox = {
+        "x": round(max(xs) - min(xs), 3),
+        "y": round(max(ys) - min(ys), 3),
+        "z": round(max(zs) - min(zs), 3),
+    }
+    v_cnt = len(positions) // 3
+    return InsertMesh3D(
+        iso_code=parsed.raw_code,
+        normalized_code=parsed.normalized_code,
+        shape_code="DRL",
+        ic_mm=dc,
+        thickness_mm=round(body_h + tip_h, 2),
+        corner_radius_mm=parsed.corner_radius_mm or 0.2,
+        clearance_angle_deg=parsed.clearance_angle_deg or 11.0,
+        has_hole=False,
+        has_countersink=False,
+        hole_diameter_mm=0.0,
+        bbox_mm=bbox,
+        vertex_count=v_cnt,
+        triangle_count=v_cnt // 3,
+        positions=[round(v, 4) for v in positions],
+        normals=[round(v, 4) for v in normals],
+    )
+
+
 def build_iso1832_mesh(code: str) -> InsertMesh3D:
     """Builds a watertight, manifold 3D triangle mesh for an ISO 1832 insert code."""
     parsed = parse_iso1832(code)
     if not parsed.valid:
         raise ValueError(parsed.error or f"Некорректный код ISO 1832: {code}")
+
+    if parsed.shape_code == "DRL":
+        return _build_axial_drill_mesh(parsed)
 
     ic = parsed.ic_mm or 12.7
     s = parsed.thickness_mm or 4.76

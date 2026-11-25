@@ -167,7 +167,66 @@
     nrm.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
   }
 
+  function buildAxialDrillMeshClient(parsed) {
+    const dc = parsed.ic_mm || 12.0;
+    const rOut = dc / 2;
+    const norm = (parsed.normalized_code || "").toUpperCase();
+    const isSolid = norm.startsWith("SCDRL");
+    const bodyH = isSolid ? Math.min(dc * 2.6, 36.0) : Math.max(dc * 0.65, 6.0);
+    const pointDeg = parsed.suffix === "AL" ? 130.0 : 140.0;
+    const tipH = rOut / Math.tan((pointDeg * Math.PI) / 360);
+    const nSeg = 48, nStacks = isSolid ? 12 : 5;
+    const twistTotal = ((isSolid ? 150 : 35) * Math.PI) / 180;
+    const zBase = -bodyH / 2, zShld = bodyH / 2, zApex = zShld + tipH;
+
+    const ringPts = (zVal, frac) => {
+      const twist = twistTotal * frac;
+      const pts = [];
+      for (let k = 0; k < nSeg; k++) {
+        const ang = (2 * Math.PI * k) / nSeg;
+        const fp = Math.cos(2 * (ang - twist));
+        const ff = fp < 0.25 ? 0.72 + 0.28 * fp : 1.0;
+        const rad = rOut * ff;
+        pts.push([rad * Math.cos(ang), rad * Math.sin(ang), zVal]);
+      }
+      return pts;
+    };
+
+    const positions = [], normals = [];
+    const rings = [];
+    for (let st = 0; st <= nStacks; st++) rings.push(ringPts(zBase + bodyH * (st / nStacks), st / nStacks));
+    for (let st = 0; st < nStacks; st++) {
+      const r0 = rings[st], r1 = rings[st + 1];
+      for (let i = 0; i < nSeg; i++) {
+        const j = (i + 1) % nSeg;
+        pushTri(positions, normals, r0[i], r0[j], r1[j]);
+        pushTri(positions, normals, r0[i], r1[j], r1[i]);
+      }
+    }
+    const topR = rings[nStacks], apex = [0, 0, zApex];
+    for (let i = 0; i < nSeg; i++) pushTri(positions, normals, topR[i], topR[(i + 1) % nSeg], apex);
+    const botR = rings[0], cBot = [0, 0, zBase];
+    for (let i = 0; i < nSeg; i++) pushTri(positions, normals, cBot, botR[(i + 1) % nSeg], botR[i]);
+
+    return {
+      iso_code: parsed.raw_code || norm,
+      shape_code: "DRL",
+      ic_mm: dc,
+      thickness_mm: +(bodyH + tipH).toFixed(2),
+      corner_radius_mm: parsed.corner_radius_mm || 0.2,
+      clearance_angle_deg: parsed.clearance_angle_deg || 11,
+      has_hole: false,
+      has_countersink: false,
+      hole_diameter_mm: 0,
+      bbox_mm: computeBBox(positions),
+      triangle_count: positions.length / 9,
+      positions,
+      normals,
+    };
+  }
+
   function buildIso1832MeshClient(parsed) {
+    if (parsed.shape_code === "DRL") return buildAxialDrillMeshClient(parsed);
     const shape = parsed.shape_code || "C";
     const ic = parsed.ic_mm || 12.7;
     const s = parsed.thickness_mm || 4.76;

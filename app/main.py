@@ -1,25 +1,37 @@
 """
-FastAPI Backend for Vendor-Agnostic Indexable Insert Selector.
+FastAPI Backend for SKM — Vendor-Agnostic Indexable Insert & Tooling Selector Suite (v1.0).
 Run locally: uvicorn app.main:app --reload --port 8000
 """
 
 from pathlib import Path
 from typing import Optional, List, Literal, Dict, Any
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.cam_export import (
+    AssemblyExportItem,
+    build_freecad_toolbit,
+    build_fusion360_library,
+    build_gtc_iso13399_package,
+)
+from app.economics import EconomicsInput, EconomicsResult, calculate_economics
 from app.geometry3d import build_iso1832_mesh, export_iso1832_stl, InsertMesh3D
+from app.inventory import StockItem, generate_sample_stock_csv, parse_stock_csv
 from app.iso1832 import parse_iso1832, ISO1832Parsed
 from app.kienzle import calculate_kienzle, CuttingCalcInput, CuttingCalcResult
 from app.repository import ToolingRepository
 
 app = FastAPI(
-    title="ISO Tooling Selector API",
-    version="0.5.0",
-    description="Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics engine, and PostgreSQL/psycopg3 backend.",
+    title="SKM · ISO Tooling Selector API",
+    version="1.1.0",
+    description=(
+        "Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics, "
+        "Taylor tool-life economics, shop-floor warehouse stock, 3D STL/STEP geometry, "
+        "CAM exporters (GTC ISO 13399, Fusion 360, FreeCAD), and PostgreSQL/psycopg3 backend."
+    ),
 )
 
 app.add_middleware(
@@ -34,7 +46,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 class SelectionRequest(BaseModel):
-    operation_domain: Literal["TURNING", "MILLING", "DRILLING"] = "TURNING"
+    operation_domain: Literal["TURNING", "MILLING", "DRILLING", "GROOVING_THREADING"] = "TURNING"
     material_subgroup: str = "P1"
     stability: Literal["STABLE", "INTERRUPTED", "UNSTABLE"] = "STABLE"
     ap_mm: float = Field(2.0, ge=0)
@@ -46,6 +58,15 @@ class SelectionRequest(BaseModel):
     overhang_mm: Optional[float] = Field(None, gt=0)
     shank_diameter_mm: Optional[float] = Field(None, gt=0)
     shank_material: Literal["STEEL", "CARBIDE", "DAMPED"] = "STEEL"
+    # Shop-floor stock & part economics
+    only_in_stock: bool = False
+    volume_to_remove_cm3: float = Field(80.0, gt=0)
+    machine_rate_rub_hr: float = Field(3500.0, ge=0)
+    # Axial drilling parameters
+    axial_subtype_filter: Optional[Literal["ALL", "INDEXABLE_U_DRILL", "MODULAR_TIP", "SOLID_CARBIDE"]] = "ALL"
+    hole_depth_mm: Optional[float] = Field(60.0, gt=0)
+    hole_entry_type: Literal["FLAT", "ANGLED_OR_CURVED", "CROSS_HOLE", "STACKED"] = "FLAT"
+    coolant_pressure_bar: Optional[float] = Field(20.0, ge=0)
 
 
 class CrossRefItem(BaseModel):
@@ -71,12 +92,50 @@ class CandidateResult(BaseModel):
     score: int
     cost_per_edge: float
     cutting_edges_count: int
+    has_wiper_geometry: bool = False
     seat_pocket_signature: str
     operating_zone_polygon: List[List[float]]
     holders: List[Dict[str, Any]]
     recommended_vc: float
     recommended_coolant: str
+    stock_qty: int = 0
+    unit_price_rub: float = 650.0
+    bin_location: str = ""
+    axial_subtype: Optional[str] = None
+    point_angle_deg: Optional[float] = None
+    ld_ratio_max: Optional[float] = None
+    tolerance_hole: Optional[str] = None
     physics: CuttingCalcResult
+    economics: EconomicsResult
+
+
+class MachineCreateRequest(BaseModel):
+    name: str
+    machine_type: Literal["LATHE", "MILL_3AX", "MILL_5AX", "TURN_MILL"] = "TURN_MILL"
+    max_rpm: int = Field(..., gt=0)
+    spindle_power_kw: float = Field(..., gt=0)
+    max_torque_nm: float = Field(..., gt=0)
+    spindle_interface: str = "BT40"
+    rigidity_class: Literal["HIGH", "MEDIUM", "LOW"] = "MEDIUM"
+
+
+class CsvUploadRequest(BaseModel):
+    csv_text: str
+
+
+# -----------------------------------------------------------------------------
+# Static Frontend & PWA Routes
+# -----------------------------------------------------------------------------
+
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+def _serve_static(filename: str, media_type: str):
+    p = STATIC_DIR / filename
+    if p.exists():
+        return FileResponse(p, media_type=media_type)
+    raise HTTPException(status_code=404, detail=f"{filename} not found")
 
 
 @app.get("/")
@@ -87,46 +146,49 @@ def serve_gui():
     return {"status": "ok", "docs": "/docs"}
 
 
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-
 @app.get("/styles.css")
 def serve_styles_css():
-    p = STATIC_DIR / "styles.css"
-    if p.exists():
-        return FileResponse(p, media_type="text/css")
-    raise HTTPException(status_code=404, detail="styles.css not found")
+    return _serve_static("styles.css", "text/css")
 
 
 @app.get("/app.js")
 def serve_app_js():
-    p = STATIC_DIR / "app.js"
-    if p.exists():
-        return FileResponse(p, media_type="application/javascript")
-    raise HTTPException(status_code=404, detail="app.js not found")
+    return _serve_static("app.js", "application/javascript")
 
 
 @app.get("/viewer3d.js")
 def serve_viewer3d_js():
-    p = STATIC_DIR / "viewer3d.js"
-    if p.exists():
-        return FileResponse(p, media_type="application/javascript")
-    raise HTTPException(status_code=404, detail="viewer3d.js not found")
+    return _serve_static("viewer3d.js", "application/javascript")
 
+
+@app.get("/manifest.json")
+def serve_manifest():
+    return _serve_static("manifest.json", "application/manifest+json")
+
+
+@app.get("/sw.js")
+def serve_sw():
+    return _serve_static("sw.js", "application/javascript")
+
+
+# -----------------------------------------------------------------------------
+# Core Catalog, ISO 1832, 3D Geometry & Physics Endpoints
+# -----------------------------------------------------------------------------
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "storage_mode": repo.mode}
+    return {"status": "ok", "version": "1.1.0", "storage_mode": repo.mode}
 
 
 @app.get("/api/catalog/meta")
 def catalog_meta():
-    return repo.get_meta()
+    meta = repo.get_meta()
+    meta["stock_count"] = len(repo.list_stock())
+    return meta
 
 
 @app.get("/api/iso1832/parse", response_model=ISO1832Parsed)
-def api_parse_iso1832(code: str = Query(..., description="ISO 1832 code, e.g. CNMG 120408")):
+def api_parse_iso1832(code: str = Query(..., description="ISO 1832 code, e.g. CNMG 120408, MGMN 300, 16ER AG60")):
     return parse_iso1832(code)
 
 
@@ -163,6 +225,11 @@ def api_calculate(payload: CuttingCalcInput):
     return calculate_kienzle(payload)
 
 
+@app.post("/api/economics/calculate", response_model=EconomicsResult)
+def api_calculate_economics(payload: EconomicsInput):
+    return calculate_economics(payload)
+
+
 @app.post("/api/select", response_model=List[CandidateResult])
 def api_select(req: SelectionRequest):
     subgroup = repo.get_subgroup(req.material_subgroup)
@@ -183,15 +250,44 @@ def api_select(req: SelectionRequest):
         if req.pocket_filter and ins["seat_pocket_signature"] != req.pocket_filter:
             continue
 
+        holder0 = ins["holders"][0] if ins["holders"] else {}
+        cat0 = holder0.get("category", "")
+        inferred_subtype = ins.get("axial_subtype") or (
+            "MODULAR_TIP" if cat0 == "MODULAR_DRILL"
+            else ("SOLID_CARBIDE" if cat0 == "SOLID_CARBIDE_DRILL" else ("INDEXABLE_U_DRILL" if req.operation_domain == "DRILLING" else None))
+        )
+        if (
+            req.operation_domain == "DRILLING"
+            and req.axial_subtype_filter
+            and req.axial_subtype_filter != "ALL"
+            and inferred_subtype != req.axial_subtype_filter
+        ):
+            continue
+
+        stock_match = repo.get_stock_match(ins["iso_code"], ins["grade_code"])
+        stock_qty = int(stock_match["qty"]) if stock_match else 0
+        if req.only_in_stock and stock_qty <= 0:
+            continue
+
+        unit_price_rub = (
+            float(stock_match["unit_price_rub"])
+            if stock_match
+            else round(float(ins["relative_cost_index"]) * 650.0, 1)
+        )
+        bin_location = stock_match["bin_location"] if stock_match else ""
+
         rec = ins["recommendations"].get(req.material_subgroup)
         if not rec:
             rec = next(iter(ins["recommendations"].values()))
 
-        vc_target = round(float(rec["vc"]) * vc_factor, 1)
-        holder0 = ins["holders"][0] if ins["holders"] else {}
+        vc_opt = float(rec["vc"])
+        vc_target = round(vc_opt * vc_factor, 1)
         dc = holder0.get("dc_mm") or req.diameter_mm
         teeth = holder0.get("z") or 1
         lead_angle = holder0.get("lead_angle_deg") or 90.0
+        drill_ld_max = ins.get("ld_ratio_max") or holder0.get("ld_ratio_max")
+        point_angle = ins.get("point_angle_deg") or (180.0 if inferred_subtype == "INDEXABLE_U_DRILL" else 140.0)
+        eff_diam = req.diameter_mm if req.operation_domain in ("TURNING", "GROOVING_THREADING", "DRILLING") else dc
 
         physics = calculate_kienzle(
             CuttingCalcInput(
@@ -202,7 +298,7 @@ def api_select(req: SelectionRequest):
                 feed_mm=req.feed_mm,
                 ap_mm=req.ap_mm,
                 ae_mm=req.ae_mm,
-                diameter_mm=dc if req.operation_domain != "TURNING" else req.diameter_mm,
+                diameter_mm=eff_diam,
                 teeth_count=teeth,
                 lead_angle_deg=lead_angle,
                 corner_radius_mm=ins["corner_radius_mm"],
@@ -210,10 +306,33 @@ def api_select(req: SelectionRequest):
                 overhang_mm=req.overhang_mm,
                 shank_diameter_mm=req.shank_diameter_mm,
                 shank_material=req.shank_material,
+                hole_depth_mm=req.hole_depth_mm if req.operation_domain == "DRILLING" else None,
+                axial_tool_subtype=inferred_subtype,
+                point_angle_deg=point_angle,
+                drill_ld_max=drill_ld_max,
+                hole_entry_type=req.hole_entry_type,
+                coolant_pressure_bar=req.coolant_pressure_bar,
                 machine_max_rpm=machine["max_rpm"] if machine else None,
                 machine_max_power_kw=machine["spindle_power_kw"] if machine else None,
                 machine_max_torque_nm=machine["max_torque_nm"] if machine else None,
+                machine_max_thrust_kn=machine.get("max_thrust_kn") if machine else None,
                 chipbreaker_polygon=ins["operating_zone_polygon"],
+            )
+        )
+
+        economics = calculate_economics(
+            EconomicsInput(
+                iso_group=iso_group,
+                coating_method=ins["coating_method"],
+                substrate_type="CBN" if "CBN" in ins["grade_code"] else "WC_CO",
+                stability=req.stability,
+                vc_actual_m_min=vc_target,
+                vc_opt_m_min=vc_opt,
+                mrr_cm3_min=max(physics.mrr_cm3_min, 0.1),
+                volume_to_remove_cm3=req.volume_to_remove_cm3,
+                insert_price_rub=unit_price_rub,
+                cutting_edges_count=ins["cutting_edges_count"],
+                machine_rate_rub_hr=req.machine_rate_rub_hr,
             )
         )
 
@@ -226,6 +345,19 @@ def api_select(req: SelectionRequest):
             score += 12 if ins["edge_prep"] == "SHARP" else 4
         else:
             score += ins["wear_resistance_index"] * 2
+        if req.operation_domain == "DRILLING":
+            # Reward diameter proximity to target hole diameter & depth capability
+            diam_diff = abs((holder0.get("dc_mm") or req.diameter_mm) - req.diameter_mm)
+            if diam_diff <= 2.0:
+                score += 12
+            elif diam_diff <= 6.0:
+                score += 6
+            elif diam_diff > 14.0:
+                score -= 10
+            if drill_ld_max and physics.drill_ld_ratio and physics.drill_ld_ratio <= drill_ld_max:
+                score += 6
+        if stock_qty > 0:
+            score += 4
         if physics.warnings:
             score -= min(len(physics.warnings) * 8, 24)
         score = max(10, min(100, score))
@@ -246,14 +378,90 @@ def api_select(req: SelectionRequest):
                 score=score,
                 cost_per_edge=cost_per_edge,
                 cutting_edges_count=ins["cutting_edges_count"],
+                has_wiper_geometry=ins["has_wiper_geometry"],
                 seat_pocket_signature=ins["seat_pocket_signature"],
                 operating_zone_polygon=ins["operating_zone_polygon"],
                 holders=ins["holders"],
                 recommended_vc=vc_target,
                 recommended_coolant=rec["coolant"],
+                stock_qty=stock_qty,
+                unit_price_rub=unit_price_rub,
+                bin_location=bin_location,
+                axial_subtype=inferred_subtype,
+                point_angle_deg=point_angle if req.operation_domain == "DRILLING" else None,
+                ld_ratio_max=drill_ld_max,
+                tolerance_hole=ins.get("tolerance_hole"),
                 physics=physics,
+                economics=economics,
             )
         )
 
-    results.sort(key=lambda r: (-r.score, r.cost_per_edge))
+    results.sort(key=lambda r: (-r.score, r.economics.total_cost_part_rub))
     return results
+
+
+# -----------------------------------------------------------------------------
+# Warehouse Stock, Machines, Assemblies & CAM Export Endpoints
+# -----------------------------------------------------------------------------
+
+@app.get("/api/stock")
+def api_list_stock():
+    return repo.list_stock()
+
+
+@app.post("/api/stock")
+def api_replace_stock(items: List[StockItem]):
+    return repo.replace_stock([i.model_dump() for i in items])
+
+
+@app.post("/api/stock/upload-csv")
+def api_upload_stock_csv(payload: CsvUploadRequest):
+    parsed = parse_stock_csv(payload.csv_text)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="Не удалось распознать строки CSV. Проверьте заголовки iso_code;qty;unit_price_rub.")
+    saved = repo.replace_stock([i.model_dump() for i in parsed])
+    return {"imported": len(saved), "items": saved}
+
+
+@app.get("/api/stock/sample-csv")
+def api_sample_stock_csv():
+    return Response(
+        content=generate_sample_stock_csv(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="skm_warehouse_stock_sample.csv"'},
+    )
+
+
+@app.post("/api/machines")
+def api_create_machine(payload: MachineCreateRequest):
+    return repo.create_machine(payload.model_dump())
+
+
+@app.get("/api/assemblies")
+def api_list_assemblies():
+    return repo.list_assemblies()
+
+
+@app.post("/api/assemblies")
+def api_create_assembly(payload: Dict[str, Any] = Body(...)):
+    return repo.create_assembly(payload)
+
+
+@app.delete("/api/assemblies/{assembly_id}")
+def api_delete_assembly(assembly_id: str):
+    return {"deleted": repo.delete_assembly(assembly_id)}
+
+
+@app.post("/api/export/gtc")
+def api_export_gtc(items: List[AssemblyExportItem]):
+    return build_gtc_iso13399_package(items)
+
+
+@app.post("/api/export/fusion360")
+def api_export_fusion360(items: List[AssemblyExportItem]):
+    return build_fusion360_library(items)
+
+
+@app.post("/api/export/freecad")
+def api_export_freecad(item: AssemblyExportItem):
+    return build_freecad_toolbit(item)
