@@ -1356,7 +1356,7 @@
             const b = document.getElementById("connBadge");
             const t = document.getElementById("connText");
             if (b) { b.classList.remove("demo"); b.classList.add("live"); }
-            if (t) t.textContent = "FastAPI Live v2.3.10";
+            if (t) t.textContent = "FastAPI Live v2.3.11";
           }
         } else {
           apiFailReason = `Сервер /api/drawing/analyze вернул HTTP ${resp.status}`;
@@ -1416,6 +1416,7 @@
       }
       if (!drawingState.visionPanelOpen) toggleVisionKeyPanel();
     }
+    drawingState.isAnalyzing = false;
     syncSpecControlsFromState();
     renderDrawingWorkspace();
     if (drawingState.previewType === "cad3d") renderDrw3DModel();
@@ -1427,6 +1428,7 @@
   }
 
   function loadDemoBlueprint(demoId) {
+    drawingState.isAnalyzing = false;
     const demo = DRAWING_DEMOS.find((d) => d.id === demoId) || DRAWING_DEMOS[0];
     drawingState.activeDemoId = demo.id;
     drawingState.filename = demo.filename;
@@ -1453,6 +1455,7 @@
   }
 
   function parseNotesFromTextarea() {
+    drawingState.isAnalyzing = false;
     const ctrl = getDrawingControls();
     if (drawingState.previewType === "cad3d" && drawingState.cad3dSummary) {
       drawingState.spec = buildSpecFromCad3dClient(
@@ -1541,6 +1544,7 @@
   }
 
   async function recomputeDrawingPlan() {
+    drawingState.isAnalyzing = false;
     if (!drawingState.spec) return;
     const matSel = document.getElementById("drwMaterialSel");
     if (matSel) {

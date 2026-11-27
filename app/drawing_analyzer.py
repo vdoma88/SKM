@@ -756,7 +756,7 @@ def _build_openai_attempts(provider: str, clean_key: str) -> Tuple[str, List[Tup
         "Content-Type": "application/json",
         "Accept": "application/json",
         "Authorization": f"Bearer {clean_key}",
-        "User-Agent": "SKM-Tooling-Selector/2.3.10",
+        "User-Agent": "SKM-Tooling-Selector/2.3.11",
     }
 
     if provider == "groq_free":
@@ -1110,7 +1110,7 @@ def analyze_blueprint_with_gemini_vision(
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json", "User-Agent": "SKM-Tooling-Selector/2.3.10"},
+                headers={"Content-Type": "application/json", "User-Agent": "SKM-Tooling-Selector/2.3.11"},
                 method="POST",
             )
             try:
