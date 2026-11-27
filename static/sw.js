@@ -1,10 +1,12 @@
-const CACHE_NAME = "skm-studio-v2.1";
+const CACHE_NAME = "skm-studio-v2.3";
 const CORE_ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./viewer3d.js",
+  "./cad3d_workpiece.js",
+  "./drawing.js",
   "./manifest.json"
 ];
 

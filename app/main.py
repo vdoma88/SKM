@@ -28,6 +28,11 @@ from app.threading import (
     calculate_hole_finishing, calculate_threading, list_thread_standards,
 )
 from app.repository import ToolingRepository
+from app.cad_workpiece import generate_demo_step_file
+from app.drawing_analyzer import (
+    DEMO_BLUEPRINTS, DrawingAnalyzeRequest, DrawingAnalyzeResponse,
+    DrawingSpec, DrawingToolingPlan, analyze_uploaded_drawing, recommend_tooling_for_blueprint,
+)
 from app.sales import (
     OrderQuoteRequest, OrderQuoteResponse, SalesCatalogItem,
     build_commercial_quote, build_sales_catalog,
@@ -35,7 +40,7 @@ from app.sales import (
 
 app = FastAPI(
     title="SKM · ISO Tooling Selector API",
-    version="2.1.0",
+    version="2.3.0",
     description=(
         "Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics, "
         "Taylor tool-life economics, shop-floor warehouse stock, 3D STL/STEP geometry, "
@@ -170,6 +175,16 @@ def serve_viewer3d_js():
     return _serve_static("viewer3d.js", "application/javascript")
 
 
+@app.get("/drawing.js")
+def serve_drawing_js():
+    return _serve_static("drawing.js", "application/javascript")
+
+
+@app.get("/cad3d_workpiece.js")
+def serve_cad3d_workpiece_js():
+    return _serve_static("cad3d_workpiece.js", "application/javascript")
+
+
 @app.get("/manifest.json")
 def serve_manifest():
     return _serve_static("manifest.json", "application/manifest+json")
@@ -186,7 +201,7 @@ def serve_sw():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "2.1.0", "storage_mode": repo.mode}
+    return {"status": "ok", "version": "2.3.0", "storage_mode": repo.mode}
 
 
 @app.get("/api/catalog/meta")
@@ -573,3 +588,28 @@ def api_create_order(payload: Dict[str, Any] = Body(...)):
 @app.delete("/api/sales/orders/{order_id}")
 def api_delete_order(order_id: str):
     return {"deleted": repo.delete_order(order_id)}
+# -----------------------------------------------------------------------------
+# v2.2 Blueprint / Drawing-to-Tooling Analyzer Endpoints
+# -----------------------------------------------------------------------------
+
+@app.get("/api/drawing/presets")
+def api_drawing_presets():
+    return DEMO_BLUEPRINTS
+
+
+@app.post("/api/drawing/analyze", response_model=DrawingAnalyzeResponse)
+def api_drawing_analyze(payload: DrawingAnalyzeRequest):
+    return analyze_uploaded_drawing(repo, payload)
+
+
+@app.post("/api/drawing/plan", response_model=DrawingToolingPlan)
+def api_drawing_plan(spec: DrawingSpec):
+    return recommend_tooling_for_blueprint(repo, spec)
+@app.get("/api/drawing/demo-step/{demo_id}")
+def api_drawing_demo_step(demo_id: str):
+    fname, content = generate_demo_step_file(demo_id)
+    return Response(
+        content=content,
+        media_type="application/step",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )

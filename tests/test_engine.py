@@ -18,6 +18,12 @@ from app.threading import HoleFinishInput, ThreadCalcInput, calculate_hole_finis
 import app.repository as repo_mod
 from app.repository import ToolingRepository
 from app.sales import OrderQuoteRequest, QuoteLineInput, build_commercial_quote, build_sales_catalog
+import base64
+from app.cad_workpiece import generate_demo_step_file, parse_step_workpiece, parse_stl_workpiece
+from app.drawing_analyzer import (
+    DEMO_BLUEPRINTS, DrawingAnalyzeRequest, DrawingFeature, DrawingSpec,
+    analyze_uploaded_drawing, parse_dxf_blueprint, recommend_tooling_for_blueprint,
+)
 
 
 def test_iso1832_pg_rounding_and_expanded_codes():
@@ -634,6 +640,138 @@ def test_commercial_quote_vat_discount_and_orders_crud():
     assert repo.delete_order(saved["id"]) is True
 
 
+def test_drawing_dxf_and_eskd_annotation_parser():
+    repo = ToolingRepository(db_url="")
+    sample_dxf = "\n".join([
+        "0", "SECTION", "2", "ENTITIES",
+        "0", "LINE", "10", "0", "20", "0", "11", "120", "21", "0",
+        "0", "CIRCLE", "10", "60", "20", "60", "40", "55",
+        "0", "CIRCLE", "10", "20", "20", "60", "40", "6",
+        "0", "CIRCLE", "10", "100", "20", "60", "40", "6",
+        "0", "CIRCLE", "10", "60", "20", "20", "40", "6",
+        "0", "CIRCLE", "10", "60", "20", "100", "40", "6",
+        "0", "TEXT", "10", "10", "20", "10", "1", "Фланец 12Х18Н10Т %%c20H7 4 отв. M12 Ra 1.6",
+        "0", "ENDSEC", "0", "EOF",
+    ])
+    parsed = parse_dxf_blueprint(sample_dxf)
+    assert parsed["bbox_w_mm"] == 120.0
+    assert any(c["diameter_mm"] == 12.0 and c["count"] == 4 for c in parsed["circles_by_diameter"])
+
+    resp = analyze_uploaded_drawing(
+        repo,
+        DrawingAnalyzeRequest(
+            filename="flange_stainless.dxf",
+            content_base64=base64.b64encode(sample_dxf.encode("utf-8")).decode("ascii"),
+            batch_qty=40,
+            include_holders=True,
+        ),
+    )
+    assert resp.detected_format == "DXF"
+    assert resp.analysis_method == "DXF_CAD_GEOMETRY_PARSER"
+    assert resp.plan.spec.iso_group == "M"
+    assert resp.plan.spec.material_subgroup == "M1"
+    codes = [ln.iso_code for ln in resp.plan.kit_lines]
+    assert "REAM-H7-200" in codes
+    assert "TAP-M12-BL" in codes
+    assert any(c.startswith("SC-DRL-") for c in codes)
+    # Ensure pre-drill guidance is generated for both H7 and M12
+    assert any(ln.pre_drill_note and "10.20" in ln.pre_drill_note for ln in resp.plan.kit_lines)
+    assert any(ln.pre_drill_note and "19.75" in ln.pre_drill_note for ln in resp.plan.kit_lines)
+
+
+def test_drawing_demo_blueprints_shared_tools_and_hardened_cbn():
+    repo = ToolingRepository(db_url="")
+    # Hardened bushing 54 HRC -> CBN turning + IT6 fine boring + thread mill (zero milling hallucinations!)
+    bushing = next(d for d in DEMO_BLUEPRINTS if d["id"] == "demo-bushing-h1")
+    res_h = analyze_uploaded_drawing(
+        repo,
+        DrawingAnalyzeRequest(filename=bushing["filename"], notes_text=bushing["notes_text"], batch_qty=50),
+    )
+    assert res_h.plan.spec.iso_group == "H"
+    assert res_h.plan.spec.hardness_hrc == 54.0
+    h_codes = [ln.iso_code for ln in res_h.plan.kit_lines]
+    assert "CNGA 120408" in h_codes
+    assert "FBORE-MIC-25" in h_codes
+    assert "TM-M16" in h_codes
+    assert all(ln.operation_domain != "MILLING" for ln in res_h.plan.kit_lines)
+
+    # Aluminum housing -> shared APKT 160408-AL isn't double-billed across Face Mill & Shoulder Pocket
+    housing = next(d for d in DEMO_BLUEPRINTS if d["id"] == "demo-housing-n1")
+    res_n = analyze_uploaded_drawing(
+        repo,
+        DrawingAnalyzeRequest(filename=housing["filename"], notes_text=housing["notes_text"], batch_qty=100),
+    )
+    assert res_n.plan.spec.iso_group == "N"
+    apkt_lines = [ln for ln in res_n.plan.kit_lines if ln.iso_code == "APKT 160408-AL"]
+    assert len(apkt_lines) == 2
+    assert apkt_lines[0].line_total_rub > 0 and apkt_lines[1].line_total_rub == 0.0
+    assert apkt_lines[1].shared_with_step == apkt_lines[0].step_no
+    assert any(ln.iso_code == "FORM-M8" for ln in res_n.plan.kit_lines)
+    assert any(ln.iso_code == "SC-DRL-100-AL" for ln in res_n.plan.kit_lines)
+
+
+def test_cad3d_step_brep_feature_recognition_and_tooling_kit():
+    repo = ToolingRepository(db_url="")
+
+    # 1) Stepped shaft Ø65x160 with 4mm groove & Ø14 axial hole
+    fn_s, step_s = generate_demo_step_file("step-shaft-p1")
+    cad_s = parse_step_workpiece(step_s, fn_s)
+    assert cad_s["bbox_x_mm"] == 65.0 and cad_s["bbox_z_mm"] == 160.0
+    assert cad_s["max_outer_diameter_mm"] == 65.0
+    assert cad_s["internal_holes_count"] == 1
+    kinds_s = [f["kind"] for f in cad_s["features"]]
+    assert "EXTERNAL_ROUGH" in kinds_s and "GROOVE_PARTING" in kinds_s and "HOLE_DRILL" in kinds_s
+
+    # 2) Flange Ø120x30 (12Х18Н10Т) + ESKD notes upgrading Ø28 -> H7 & adding 4x M10
+    fn_f, step_f = generate_demo_step_file("step-flange-m1")
+    resp = analyze_uploaded_drawing(
+        repo,
+        DrawingAnalyzeRequest(
+            filename=fn_f,
+            content_base64=base64.b64encode(step_f.encode("utf-8")).decode("ascii"),
+            notes_text="Ø28 H7, 4 отв. M10",
+            batch_qty=60,
+        ),
+    )
+    assert resp.detected_format == "STEP"
+    assert resp.analysis_method == "STEP_3D_CAD_AFR"
+    assert resp.cad3d_summary is not None
+    assert resp.cad3d_summary["bbox_x_mm"] == 120.0 and resp.cad3d_summary["bbox_z_mm"] == 30.0
+    assert resp.plan.spec.iso_group == "M"
+    codes = [ln.iso_code for ln in resp.plan.kit_lines]
+    assert "FBORE-MIC-25" in codes  # Ø28 H7 upgraded in-place to fine boring
+    assert any(c.startswith("SC-DRL-") for c in codes)  # 6x Ø12 holes
+    assert any(c.startswith("TAP-") for c in codes)  # 4x M10 thread
+
+
+def test_cad3d_stl_mesh_analyzer_and_housing_step():
+    repo = ToolingRepository(db_url="")
+
+    # Prismatic housing STEP 140x100x45 (Д16Т)
+    fn_h, step_h = generate_demo_step_file("step-housing-n1")
+    resp_h = analyze_uploaded_drawing(
+        repo,
+        DrawingAnalyzeRequest(
+            filename=fn_h,
+            content_base64=base64.b64encode(step_h.encode("utf-8")).decode("ascii"),
+            batch_qty=40,
+        ),
+    )
+    assert resp_h.cad3d_summary["bbox_x_mm"] == 140.0
+    assert resp_h.cad3d_summary["bbox_y_mm"] == 100.0
+    assert resp_h.cad3d_summary["bbox_z_mm"] == 45.0
+    assert resp_h.plan.spec.iso_group == "N"
+    assert any(ln.iso_code == "APKT 160408-AL" for ln in resp_h.plan.kit_lines)
+
+    # STL workpiece analyzer (using generated ASCII STL)
+    stl_bytes = export_iso1832_stl("SC-DRL-120-8D").encode("utf-8")
+    stl_res = parse_stl_workpiece(stl_bytes, "shaft_blank.stl")
+    assert stl_res["triangle_count"] >= 500
+    assert stl_res["part_volume_cm3"] > 0.0
+    assert stl_res["removal_volume_cm3"] > 0.0
+    assert len(stl_res["features"]) >= 1
+
+
 if __name__ == "__main__":
     test_iso1832_pg_rounding_and_expanded_codes()
     test_kienzle_turning_and_milling()
@@ -651,4 +789,8 @@ if __name__ == "__main__":
     test_cnc_gcode_generator_fanuc_and_siemens()
     test_sales_catalog_search_filters_pricing_and_upsell()
     test_commercial_quote_vat_discount_and_orders_crud()
-    print("ALL SKM v2.1 SALES EDITION TESTS (16 SUITES) PASSED!")
+    test_drawing_dxf_and_eskd_annotation_parser()
+    test_drawing_demo_blueprints_shared_tools_and_hardened_cbn()
+    test_cad3d_step_brep_feature_recognition_and_tooling_kit()
+    test_cad3d_stl_mesh_analyzer_and_housing_step()
+    print("ALL SKM v2.3 3D CAD FEATURE RECOGNITION TESTS (20 SUITES) PASSED!")

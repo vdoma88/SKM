@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0072CE" />
-  <title>SKM · Подбор и заказ пластин (СМП) v2.1</title>
+  <title>SKM · Подбор и заказ пластин (СМП) v2.3</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -17,9 +17,9 @@
       <div>
         <div class="brand-title">
           SKM · Подбор и заказ пластин
-          <span class="brand-version">v2.1</span>
+          <span class="brand-version">v2.3</span>
         </div>
-        <div class="brand-sub">Коммерческий подбор СМП и осевого инструмента · Остатки, цены, аналоги, КП и инженерные расчёты</div>
+        <div class="brand-sub">Коммерческий подбор СМП и осевого инструмента · Подбор по 3D-модели (STEP/STL) и чертежу (DXF/PDF/Фото), остатки, цены, КП и инженерные расчёты</div>
       </div>
     </div>
 
@@ -41,6 +41,9 @@
     <span class="nav-group-label">Продажи:</span>
     <button class="nav-tab active" data-tab="sales" onclick="switchTab('sales')">
       🛒 Подбор и заказ <span id="salesCountBadge" class="tab-badge">36</span>
+    </button>
+    <button class="nav-tab" data-tab="drawing" onclick="switchTab('drawing')">
+      📐 Чертёж / 3D <span class="tab-badge">STEP/DXF</span>
     </button>
     <button class="nav-tab" data-tab="stock" onclick="switchTab('stock')">
       📦 Склад и цены <span id="stockBadge" class="tab-badge">0</span>
@@ -80,7 +83,8 @@
         <input id="salesSearchInput" class="sales-search-input" type="text"
           placeholder="🔍 Введите код пластины (CNMG 120408, WNMG, APKT), державку (PCLNR) или материал (сталь, нержавейка, 40Х, Д16Т, титан)..."
           oninput="renderSalesCatalog()" />
-        <button class="v-btn" onclick="resetSalesFilters()">✕ Сбросить фильтры</button>
+        <button class="icon-btn primary" style="padding:10px 14px;" onclick="switchTab('drawing')">📐 По чертежу / 3D</button>
+        <button class="v-btn" onclick="resetSalesFilters()">✕ Сбросить</button>
       </div>
 
       <div class="preset-chips" style="margin-bottom:6px;">
@@ -210,6 +214,181 @@
           <div id="savedOrdersList" style="display:flex;flex-direction:column;gap:7px;"></div>
         </section>
       </aside>
+    </div>
+  </section>
+
+  <!-- DRAWING-TO-TOOLING SCREEN (v2.2): UPLOAD BLUEPRINT -> AUTOMATIC TOOLING KIT & ORDER -->
+  <section id="tab-drawing" class="tab-panel">
+    <section class="card">
+      <div class="card-head" style="margin-bottom:10px;">
+        <div class="card-title" style="color:var(--accent);">📐 Подбор комплекта инструмента по 3D-модели (.STEP/.STL) или чертежу заготовки</div>
+        <div class="viewer3d-btns">
+          <button class="v-btn" onclick="toggleVisionKeyPanel()">🤖 ИИ-зрение для сканов (опц.)</button>
+          <span class="card-subtitle" id="drwMethodBadge" style="color:var(--accent);">Готов к загрузке чертежа</span>
+        </div>
+      </div>
+
+      <div id="drwDropzone" class="drw-dropzone" onclick="document.getElementById('drwFileInput').click()">
+        <div>
+          <div class="drw-drop-title">📂 Перетащите 3D-модель (.STEP / .STL) или чертёж (.DXF / .PDF / фото) сюда</div>
+          <div class="drw-drop-sub">Авто-распознавание <b>3D STEP / STP</b> (габариты, цилиндры, канавки, отверстия Ø), <b>3D STL / IGES</b>, <b>2D DXF</b> (AutoCAD / Компас-3D), <b>PDF</b> и сканы <b>PNG/JPG</b></div>
+        </div>
+        <div class="viewer3d-btns" onclick="event.stopPropagation()">
+          <button class="icon-btn primary" onclick="document.getElementById('drwFileInput').click()">📂 Загрузить 3D / чертёж</button>
+          <input type="file" id="drwFileInput" accept=".step,.stp,.stl,.iges,.igs,.dxf,.pdf,.png,.jpg,.jpeg,.webp,.bmp,.txt" style="display:none;" onchange="handleDrawingFileInput(event)" />
+        </div>
+      </div>
+
+      <div id="drwVisionKeyPanel" class="drw-vision-panel">
+        <span style="font-size:12px;color:var(--text-soft);font-weight:700;">Gemini Vision API Key (для авто-распознавания фото/сканов):</span>
+        <input id="drwGeminiKeyInput" type="password" style="flex:1;min-width:220px;" placeholder="AIzaSy... (хранится только в вашем браузере)" />
+        <button class="v-btn" onclick="saveGeminiVisionKey()">Сохранить ключ</button>
+        <button class="v-btn accent" onclick="runVisionOnCurrentImage()">🤖 Распознать скан сейчас</button>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:12px;">
+        <span style="font-size:11.5px;color:var(--accent);font-weight:800;">🧊 3D STEP модели:</span>
+        <button class="op-pill active" data-demo-bp="step-shaft-p1" onclick="loadDemo3DWorkpiece('step-shaft-p1')">🧊 3D Вал Ø65×160 (40Х)</button>
+        <button class="op-pill" data-demo-bp="step-flange-m1" onclick="loadDemo3DWorkpiece('step-flange-m1')">🧊 3D Фланец Ø120 (12Х18 · 6 отв.)</button>
+        <button class="op-pill" data-demo-bp="step-housing-n1" onclick="loadDemo3DWorkpiece('step-housing-n1')">🧊 3D Корпус 140×100 (Д16Т)</button>
+        <span style="font-size:11.5px;color:var(--muted);font-weight:700;margin-left:6px;">2D ЕСКД:</span>
+        <button class="op-pill" data-demo-bp="demo-shaft-p1" onclick="loadDemoBlueprint('demo-shaft-p1')">Вал Ø60 Ст45</button>
+        <button class="op-pill" data-demo-bp="demo-flange-m1" onclick="loadDemoBlueprint('demo-flange-m1')">Фланец Ø120 12Х18Н10Т (H7 + M12)</button>
+        <button class="op-pill" data-demo-bp="demo-housing-n1" onclick="loadDemoBlueprint('demo-housing-n1')">Корпус Д16Т (фрезеровка + M8)</button>
+        <button class="op-pill" data-demo-bp="demo-bushing-h1" onclick="loadDemoBlueprint('demo-bushing-h1')">Втулка Х12МФ 54 HRC (CBN + IT6)</button>
+      </div>
+    </section>
+
+    <div class="drw-workspace">
+      <!-- LEFT COLUMN: Blueprint Viewer + TT Notes + Editable Extracted Features -->
+      <div style="display:flex;flex-direction:column;gap:14px;min-width:0;">
+        <section class="card">
+          <div class="card-head" style="margin-bottom:9px;">
+            <div class="card-title">Предпросмотр 3D-заготовки / чертежа</div>
+            <div id="drwZoomBar" class="viewer3d-btns" style="display:none;">
+              <button class="v-btn" onclick="setDrawingZoom(0)">Вместить</button>
+              <button class="v-btn" onclick="setDrawingZoom(100)">100%</button>
+              <button class="v-btn" onclick="setDrawingZoom(150)">150%</button>
+              <button class="v-btn" onclick="setDrawingZoom(200)">200%</button>
+            </div>
+            <div id="drw3dToolbar" class="viewer3d-btns" style="display:none;">
+              <button class="v-btn" onclick="setDrw3dView('iso')">Изометрия</button>
+              <button class="v-btn" onclick="setDrw3dView('top')">Сверху</button>
+              <button class="v-btn" onclick="setDrw3dView('side')">Сбоку</button>
+              <button id="btnDrw3dWire" class="v-btn" onclick="toggleDrw3dWire()">Сетка</button>
+              <button id="btnDrw3dAxes" class="v-btn active" onclick="toggleDrw3dAxes()">Оси</button>
+              <button id="btnDrwDlStep" class="v-btn accent" onclick="downloadCurrentDemoStep()">⬇ .STEP</button>
+            </div>
+          </div>
+          <div id="drwPreviewStage" class="drw-preview-stage"></div>
+          <div id="drw3dStageWrap" style="display:none;">
+            <div class="drw-3d-stage">
+              <div id="drw3dMount" class="viewer3d-mount"></div>
+              <div class="drw-3d-badge" id="drw3dStatus">3D CAD</div>
+              <div class="viewer3d-drop-hint">ЛКМ: вращение · ПКМ: сдвиг · Колесо: зум</div>
+            </div>
+            <div id="drw3dInfo" style="font-size:11.5px;color:var(--muted);margin-top:6px;"></div>
+            <div id="drw3dTelemetry" class="drw-3d-telemetry" style="display:none;"></div>
+          </div>
+
+          <div style="margin-top:11px;">
+            <div class="field-label">
+              <span>Технические требования (ТТ) / штамп / заметки с чертежа</span>
+              <button class="v-btn accent" style="padding:4px 9px;font-size:11.5px;" onclick="parseNotesFromTextarea()">🔍 Распознать по тексту</button>
+            </div>
+            <textarea id="drwNotesInput" class="drw-notes-area" placeholder="Вставьте или допишите требования с чертежа, например: Сталь 40Х, вал Ø60, Ra 1.6, канавка 3 мм, 4 отв. M12, Ø20 H7..."></textarea>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head" style="margin-bottom:10px;">
+            <div class="card-title">Параметры заготовки и обнаруженные элементы</div>
+            <button class="v-btn accent" style="padding:4px 9px;font-size:11.5px;" onclick="toggleAddFeatureForm()">+ Добавить элемент</button>
+          </div>
+
+          <div class="drw-spec-grid">
+            <div class="field" style="margin-bottom:0;">
+              <div class="field-label"><span>Материал заготовки (ISO 513)</span></div>
+              <select id="drwMaterialSel" onchange="recomputeDrawingPlan()"></select>
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <div class="field-label"><span>Партия (дет.)</span></div>
+              <input type="number" id="drwBatchQty" min="1" max="100000" value="50" oninput="recomputeDrawingPlan()" />
+            </div>
+            <div class="field" style="margin-bottom:0;">
+              <div class="field-label"><span>Условия СПИД</span></div>
+              <select id="drwStabilitySel" onchange="recomputeDrawingPlan()">
+                <option value="STABLE">Стабильные</option>
+                <option value="INTERRUPTED">Прерывистые / корка</option>
+                <option value="UNSTABLE">Нежёсткий вылет</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:11px;">
+            <div class="preset-chips">
+              <button class="chip" onclick="setDrawingBatchPreset(10)">10 шт</button>
+              <button class="chip" onclick="setDrawingBatchPreset(50)">50 шт</button>
+              <button class="chip" onclick="setDrawingBatchPreset(200)">200 шт</button>
+              <button class="chip" onclick="setDrawingBatchPreset(1000)">1000 шт</button>
+            </div>
+            <label class="switch-row" style="padding:5px 10px;">
+              <span>Включать державки / корпуса</span>
+              <input type="checkbox" id="drwIncludeHoldersChk" checked onchange="recomputeDrawingPlan()" />
+            </label>
+          </div>
+
+          <div id="drwFeaturesList" class="drw-features-list"></div>
+
+          <form id="drwAddFeatureBox" class="drw-add-form" style="display:none;" onsubmit="submitAddDrawingFeature(event)">
+            <div style="font-size:11.5px;font-weight:800;color:var(--accent);margin-bottom:8px;text-transform:uppercase;">Добавить элемент с чертежа</div>
+            <div class="drw-add-grid">
+              <select id="drwNewKind">
+                <option value="EXTERNAL_ROUGH">Наружное точение</option>
+                <option value="EXTERNAL_FINISH">Чистовое точение (Ra)</option>
+                <option value="INTERNAL_BORE">Внутренняя расточка</option>
+                <option value="GROOVE_PARTING">Канавка / Отрезка</option>
+                <option value="THREAD_EXTERNAL">Наружная резьба</option>
+                <option value="THREAD_INTERNAL">Резьбовое отверстие</option>
+                <option value="HOLE_DRILL">Сверление отверстия</option>
+                <option value="HOLE_PRECISION">Точное отв. H7/IT6</option>
+                <option value="FACE_MILL">Торцевое фрезерование</option>
+                <option value="SHOULDER_POCKET">Уступ / Карман 90°</option>
+                <option value="COPY_3D">3D-копирование</option>
+              </select>
+              <input type="number" id="drwNewDiam" step="0.5" placeholder="Ø / W" value="20" />
+              <input type="number" id="drwNewDepth" step="1" placeholder="L / глуб." value="40" />
+              <input type="number" id="drwNewCount" min="1" placeholder="Шт" value="1" />
+              <input type="text" id="drwNewExtra" placeholder="M12 / H7" />
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:7px;">
+              <button type="button" class="v-btn" onclick="toggleAddFeatureForm()">Отмена</button>
+              <button type="submit" class="icon-btn primary">Добавить в маршрут</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <!-- RIGHT COLUMN: Automatic Process Plan -> Tooling BOM & 1-Click Order/KP -->
+      <section class="card">
+        <div class="card-head">
+          <div class="card-title">Подобранный комплект инструмента по чертежу</div>
+          <div class="viewer3d-btns">
+            <button class="icon-btn primary" onclick="addBlueprintKitToCart(false)">🛒 Весь комплект в корзину</button>
+            <button class="v-btn accent" onclick="addBlueprintKitToCart(true)">📄 Сразу КП (PDF)</button>
+          </div>
+        </div>
+
+        <div id="drwKitKpis" class="drw-kpi-grid"></div>
+        <div id="drwKitWarnings" class="warnings-box" style="display:none;margin-bottom:10px;"></div>
+        <div id="drwKitList" class="drw-kit-list"></div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+          <button class="v-btn" onclick="focusOrderCart()">Перейти в корзину →</button>
+          <button class="icon-btn primary" onclick="addBlueprintKitToCart(false)">🛒 Добавить весь комплект в заказ</button>
+          <button class="v-btn accent" onclick="addBlueprintKitToCart(true)">📄 Сформировать КП по чертежу</button>
+        </div>
+      </section>
     </div>
   </section>
 
@@ -768,6 +947,8 @@
 <div id="toast" class="toast"></div>
 
 <script src="./viewer3d.js"></script>
+<script src="./cad3d_workpiece.js"></script>
+<script src="./drawing.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>
