@@ -428,16 +428,16 @@ def parse_drawing_annotations(
                 )
             )
 
-    # 4. Precision Holes (H7 / H8 / IT6)
+    # 4. Precision Holes (ISO 286 UPPERCASE H7 / H8 / H6 / IT6 only — lowercase h6/h7 is an EXTERNAL shaft!)
     seen_prec: set[float] = set()
+    has_shaft_precision = bool(re.search(r"(?:ø|Ø|d|D|ф|Ф)?\s*\d{1,3}(?:[.,]\d+)?\s*(?:h6|h7|g6|k6|js6|m6)\b", full_text))
     prec_pat = re.compile(
-        r"(?:(\d+)\s*(?:отв\.?|шт\.?|x|х)\s*)?(?:ø|Ø|d|D|ф|Ф)?\s*(\d{1,3}(?:[.,]\d+)?)\s*(H7|H8|IT6|H6)\b",
-        flags=re.IGNORECASE,
+        r"(?:(\d+)\s*(?:отв\.?|шт\.?|x|х)\s*)?(?:ø|Ø|d|D|ф|Ф)?\s*(\d{1,3}(?:[.,]\d+)?)\s*(H7|H8|IT6|H6|Н7|Н8|Н6)\b",
     )
     for m in prec_pat.finditer(full_text):
         cnt = int(m.group(1)) if m.group(1) else 1
         diam = float(m.group(2).replace(",", "."))
-        tol = m.group(3).upper()
+        tol = m.group(3).replace("Н", "H").upper()
         if tol == "H6":
             tol = "IT6"
         if diam < 3.0 or diam > 220.0 or diam in seen_prec:
@@ -487,10 +487,10 @@ def parse_drawing_annotations(
         ctx = full_text[max(0, m.start() - 20):min(len(full_text), m.end() + 24)].lower()
 
         after_d = full_text[m.end():min(len(full_text), m.end() + 8)].lower()
-        if any(t in after_d for t in ("h7", "h8", "it6")):
+        if re.search(r"\b(?:H7|H8|H6|IT6|Н7|Н8|Н6)\b", full_text[m.end():min(len(full_text), m.end() + 8)]):
             continue
         if any(w in ctx for w in ("отв", "сверл", "глуб", "сквоз")) or cnt >= 2:
-            if 3.0 <= diam <= 55.0 and diam not in seen_holes:
+            if 1.5 <= diam <= 55.0 and diam not in seen_holes:
                 seen_holes.add(diam)
                 features.append(
                     DrawingFeature(
@@ -565,7 +565,7 @@ def parse_drawing_annotations(
                 notes="Основной съём припуска с наружного контура",
             ),
         )
-        if (hrc_val is None or hrc_val < 45.0) and ((ra_min is not None and ra_min <= 1.6) or "чистов" in low):
+        if (hrc_val is None or hrc_val < 45.0) and ((ra_min is not None and ra_min <= 1.6) or "чистов" in low or has_shaft_precision):
             features.insert(
                 1,
                 DrawingFeature(
@@ -1279,6 +1279,12 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
         include_holders=req.include_holders,
     )
     plan = recommend_tooling_for_blueprint(repo, spec)
+    if method == "IMAGE_PREVIEW_AND_TT" and not extracted_text:
+        plan.warnings.insert(
+            0,
+            "Загружено растровое изображение (JPG/PNG), но GEMINI_API_KEY не настроен на сервере Render и не введён в браузере. "
+            "Добавьте GEMINI_API_KEY в Render Environment Variables или впишите размеры с чертежа в поле «Технические требования (ТТ)» ниже.",
+        )
     return DrawingAnalyzeResponse(
         detected_format=ext.upper(),
         analysis_method=method,

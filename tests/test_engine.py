@@ -772,6 +772,17 @@ def test_cad3d_stl_mesh_analyzer_and_housing_step():
     assert len(stl_res["features"]) >= 1
 
 
+def test_drawing_shaft_h6_vs_hole_H7_and_small_holes():
+    repo = ToolingRepository(db_url="")
+    tt = "Втулка Ст45, наруж. Ø50 h6, Ø58, L=70, Ra 0.8, отв. Ø32 H7, внутр. расточка Ø42, канавка шир. 6 мм, 2 отв. Ø2"
+    resp = analyze_uploaded_drawing(repo, DrawingAnalyzeRequest(filename="bushing.txt", notes_text=tt, batch_qty=50))
+    feats = [(f.kind, f.diameter_mm) for f in resp.plan.spec.features]
+    assert ("HOLE_PRECISION", 50.0) not in feats
+    assert ("HOLE_PRECISION", 32.0) in feats
+    assert ("HOLE_DRILL", 2.0) in feats
+    assert any(f.kind == "EXTERNAL_FINISH" for f in resp.plan.spec.features)
+
+
 if __name__ == "__main__":
     test_iso1832_pg_rounding_and_expanded_codes()
     test_kienzle_turning_and_milling()
@@ -793,4 +804,5 @@ if __name__ == "__main__":
     test_drawing_demo_blueprints_shared_tools_and_hardened_cbn()
     test_cad3d_step_brep_feature_recognition_and_tooling_kit()
     test_cad3d_stl_mesh_analyzer_and_housing_step()
-    print("ALL SKM v2.3 3D CAD FEATURE RECOGNITION TESTS (20 SUITES) PASSED!")
+    test_drawing_shaft_h6_vs_hole_H7_and_small_holes()
+    print("ALL SKM v2.3.2 DRAWING + 3D CAD TESTS (21 SUITES) PASSED!")

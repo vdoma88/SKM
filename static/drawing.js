@@ -445,13 +445,15 @@
       });
     }
 
-    // Precision Holes H7 / H8 / IT6
+    // Precision Holes (UPPERCASE H7 / H8 / H6 / IT6 only — lowercase h6/h7 is an EXTERNAL shaft!)
     const seenPrec = new Set();
-    const precRx = /(?:(\d+)\s*(?:отв\.?|шт\.?|x|х)\s*)?(?:ø|Ø|d|D|ф|Ф)?\s*(\d{1,3}(?:[.,]\d+)?)\s*(H7|H8|IT6|H6)\b/gi;
+    const hasShaftPrec = /(?:ø|Ø|d|D|ф|Ф)?\s*\d{1,3}(?:[.,]\d+)?\s*(?:h6|h7|g6|k6|js6|m6)\b/.test(full);
+    const precRx = /(?:(\d+)\s*(?:отв\.?|шт\.?|x|х)\s*)?(?:ø|Ø|d|D|ф|Ф)?\s*(\d{1,3}(?:[.,]\d+)?)\s*(H7|H8|IT6|H6|Н7|Н8|Н6)\b/g;
     while ((m = precRx.exec(full)) !== null) {
       const cnt = m[1] ? parseInt(m[1], 10) : 1;
       const d = parseFloat(m[2].replace(",", "."));
-      const tol = m[3].toUpperCase() === "H6" ? "IT6" : m[3].toUpperCase();
+      const rawTol = m[3].replace(/Н/g, "H").toUpperCase();
+      const tol = rawTol === "H6" ? "IT6" : rawTol;
       if (d < 3 || d > 220 || seenPrec.has(d)) continue;
       seenPrec.add(d);
       features.push({
@@ -501,10 +503,10 @@
       const d = parseFloat(m[2].replace(",", "."));
       const dep = m[3] ? parseFloat(m[3].replace(",", ".")) : null;
       const afterD = full.slice(m.index + m[0].length, m.index + m[0].length + 8).toLowerCase();
-      if (/(h7|h8|it6)/i.test(afterD)) continue;
+      if (/\b(?:H7|H8|H6|IT6|Н7|Н8|Н6)\b/.test(full.slice(m.index + m[0].length, m.index + m[0].length + 8))) continue;
       const ctx = full.slice(Math.max(0, m.index - 20), Math.min(full.length, m.index + m[0].length + 24)).toLowerCase();
       if (/(отв|сверл|глуб|сквоз)/i.test(ctx) || cnt >= 2) {
-        if (d >= 3 && d <= 55 && !seenHoles.has(d)) {
+        if (d >= 1.5 && d <= 55 && !seenHoles.has(d)) {
           seenHoles.add(d);
           features.push({
             id: nextId(),
@@ -590,7 +592,7 @@
         notes: "Основной съём припуска",
         source: "AUTO",
       });
-      if ((hrc == null || hrc < 45) && ((raMin != null && raMin <= 1.6) || low.includes("чистов"))) {
+      if ((hrc == null || hrc < 45) && ((raMin != null && raMin <= 1.6) || low.includes("чистов") || hasShaftPrec)) {
         features.splice(1, 0, {
           id: nextId(),
           kind: "EXTERNAL_FINISH",
@@ -1183,6 +1185,11 @@
   async function handleDrawingFile(file) {
     if (!file) return;
     const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const wasDemo = !!drawingState.activeDemoId;
+    if (wasDemo) {
+      const notesEl = document.getElementById("drwNotesInput");
+      if (notesEl) notesEl.value = "";
+    }
     const ctrl = getDrawingControls();
     drawingState.filename = file.name;
     drawingState.format = ext.toUpperCase();
@@ -1316,10 +1323,23 @@
       drawingState.plan = recommendToolingForBlueprintClient(spec);
     }
 
+    if (drawingState.analysisMethod === "IMAGE_PREVIEW_AND_TT" && !(document.getElementById("drwNotesInput")?.value || "").trim()) {
+      drawingState.plan.warnings = drawingState.plan.warnings || [];
+      if (!drawingState.plan.warnings.some((w) => w.includes("GEMINI_API_KEY"))) {
+        drawingState.plan.warnings.unshift(
+          "Для автоматического чтения фото/скана (JPG/PNG) добавьте GEMINI_API_KEY в Render или через кнопку «🤖 ИИ-зрение для сканов», либо впишите основные размеры в поле ТТ ниже."
+        );
+      }
+      if (!drawingState.visionPanelOpen) toggleVisionKeyPanel();
+    }
     syncSpecControlsFromState();
     renderDrawingWorkspace();
     if (drawingState.previewType === "cad3d") renderDrw3DModel();
-    showToast(`${drawingState.previewType === "cad3d" ? "3D-модель" : "Чертёж"} «${file.name}» обработан(а) · подобрано ${drawingState.plan.total_operations} оп.`);
+    showToast(
+      drawingState.analysisMethod === "IMAGE_PREVIEW_AND_TT" && !(document.getElementById("drwNotesInput")?.value || "").trim()
+        ? `Скан «${file.name}» открыт — введите Gemini API Key или размеры в поле ТТ!`
+        : `${drawingState.previewType === "cad3d" ? "3D-модель" : "Чертёж"} «${file.name}» обработан(а) · подобрано ${drawingState.plan.total_operations} оп.`
+    );
   }
 
   function loadDemoBlueprint(demoId) {
