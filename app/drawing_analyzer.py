@@ -756,7 +756,7 @@ def _build_openai_attempts(provider: str, clean_key: str) -> Tuple[str, List[Tup
         "Content-Type": "application/json",
         "Accept": "application/json",
         "Authorization": f"Bearer {clean_key}",
-        "User-Agent": "SKM-Tooling-Selector/2.3.9",
+        "User-Agent": "SKM-Tooling-Selector/2.3.10",
     }
 
     if provider == "groq_free":
@@ -895,6 +895,62 @@ def test_vision_connection(api_key: Optional[str] = None) -> Dict[str, Any]:
         return {"ok": False, "provider": provider, "error": str(exc)}
 
 
+def _normalize_vision_features(feats: List[DrawingFeature]) -> List[DrawingFeature]:
+    """Post-processes raw Vision AI features: fixes H7 bores, strips lathe chamfer/step milling hallucinations, merges duplicate turning steps."""
+    has_lathe = any(f.kind in ("EXTERNAL_ROUGH", "EXTERNAL_FINISH", "INTERNAL_BORE", "GROOVE_PARTING") for f in feats)
+    cleaned: List[DrawingFeature] = []
+
+    for f in feats:
+        title_low = (f.title or "").lower()
+        tol_raw = (f.tolerance or "").strip()
+
+        # 1. Strip milling hallucinations on rotational lathe parts (chamfers 1x45°, linear steps "ступень Ø10/Ø22")
+        if has_lathe and f.kind in ("FACE_MILL", "SHOULDER_POCKET"):
+            is_chamfer = any(w in title_low for w in ("фаск", "chamfer", "1x45", "1×45", "45°"))
+            is_turned_step = any(w in title_low for w in ("ступен", "торец", "выступ", "step")) and not any(
+                w in title_low for w in ("карман", "шпон", "лыск", "плоскост", "паз", "контур")
+            )
+            if is_chamfer or is_turned_step:
+                continue
+
+        # 2. Upgrade internal bore with uppercase H7/H8/IT6/H6 tolerance to HOLE_PRECISION
+        if f.kind == "INTERNAL_BORE":
+            m_tol = re.search(r"\b(H7|H8|IT6|H6|Н7|Н8|Н6)\b", f"{f.title} {tol_raw}")
+            if m_tol:
+                t_norm = m_tol.group(1).replace("Н", "H").upper()
+                f.kind = "HOLE_PRECISION"
+                f.tolerance = "IT6" if t_norm == "H6" else t_norm
+                f.notes = f"Чистовая обработка точного отверстия под {f.tolerance}"
+
+        cleaned.append(f)
+
+    # 3. Consolidate multiple turning passes of the same kind (e.g. 3x EXTERNAL_FINISH -> 1 combined finish pass)
+    merged: List[DrawingFeature] = []
+    by_turn_kind: Dict[str, DrawingFeature] = {}
+    for f in cleaned:
+        if f.kind in ("EXTERNAL_ROUGH", "EXTERNAL_FINISH", "INTERNAL_BORE"):
+            if f.kind not in by_turn_kind:
+                by_turn_kind[f.kind] = f
+                merged.append(f)
+            else:
+                base = by_turn_kind[f.kind]
+                # Keep the largest OD for external or representative diameter for bore, and sharpest Ra
+                if f.diameter_mm is not None:
+                    if base.diameter_mm is None or (f.kind != "INTERNAL_BORE" and f.diameter_mm > base.diameter_mm):
+                        base.diameter_mm = f.diameter_mm
+                    d_tag = f"Ø{f.diameter_mm:g}"
+                    if d_tag not in base.title:
+                        base.title = f"{base.title} / {d_tag}"
+                if f.ra_um is not None and (base.ra_um is None or f.ra_um < base.ra_um):
+                    base.ra_um = f.ra_um
+                if f.tolerance and not base.tolerance:
+                    base.tolerance = f.tolerance
+        else:
+            merged.append(f)
+
+    return merged or feats
+
+
 def analyze_blueprint_with_gemini_vision(
     file_bytes: bytes,
     mime_type: str,
@@ -929,10 +985,18 @@ def analyze_blueprint_with_gemini_vision(
     b64_img = base64.b64encode(file_bytes).decode("ascii")
 
     prompt = (
-        "You are a CNC manufacturing & ESKD blueprint engineer. Analyze this engineering drawing carefully. "
-        "Read all outer diameters, internal bore diameters, ISO 286 tolerances (remember uppercase H7/H8/IT6 = hole, "
-        "lowercase h6/h7 = external shaft), surface roughness Ra, grooves (width & diameter), threads (M/MF/G/NPT), "
-        "and small drilled holes (including radial oil holes like 2 отв. Ø2). "
+        "You are a senior CNC technologist & ESKD blueprint engineer. Analyze this engineering drawing and build a CONCISE, "
+        "realistic CNC operation route (typically 3 to 7 operations total — DO NOT create a separate operation for every single diameter step or linear length!).\n"
+        "STRICT RULES:\n"
+        "1. If the part is a rotational turned part (втулка, вал, фланец, кольцо, ось, шкив):\n"
+        "   - Group ALL rough external diameters into ONE 'EXTERNAL_ROUGH' operation (use max outer diameter).\n"
+        "   - Group ALL precision/smooth external diameters (Ra <= 1.6 or h6/h7/k6/g6) into ONE 'EXTERNAL_FINISH' operation.\n"
+        "   - Group rough/stepped internal bores into ONE 'INTERNAL_BORE' operation.\n"
+        "   - Put ANY internal hole with UPPERCASE tolerance H7, H8, H6, or IT6 (e.g. Ø32 H7) into 'HOLE_PRECISION' (NOT INTERNAL_BORE).\n"
+        "   - NEVER create 'FACE_MILL' or 'SHOULDER_POCKET' for chamfers (фаска 1x45°), axial lengths (10, 22, 27), or turned steps! Chamfers are turned by the same lathe insert.\n"
+        "   - Only use FACE_MILL / SHOULDER_POCKET if there are genuine milled flats, keyways (шпоночный паз), or prismatic pockets.\n"
+        "2. Grooves (канавка/проточка) -> 'GROOVE_PARTING' with width_mm (e.g. 6).\n"
+        "3. Small drilled / radial holes (e.g. '2 отв. Ø2') -> 'HOLE_DRILL' with exact diameter_mm and count.\n"
         "Return ONLY valid JSON (no markdown, no explanation) with this exact schema:\n"
         "{\n"
         '  "part_name": "short Russian part name, e.g. Втулка ступенчатая Ø58x70",\n'
@@ -1046,7 +1110,7 @@ def analyze_blueprint_with_gemini_vision(
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json", "User-Agent": "SKM-Tooling-Selector/2.3.9"},
+                headers={"Content-Type": "application/json", "User-Agent": "SKM-Tooling-Selector/2.3.10"},
                 method="POST",
             )
             try:
@@ -1117,9 +1181,16 @@ def analyze_blueprint_with_gemini_vision(
     if not feats:
         return None
 
+    feats = _normalize_vision_features(feats)
+    has_turn_v = any(f.kind in ("EXTERNAL_ROUGH", "EXTERNAL_FINISH", "INTERNAL_BORE", "GROOVE_PARTING", "THREAD_EXTERNAL") for f in feats)
+    has_mill_v = any(f.kind in ("FACE_MILL", "SHOULDER_POCKET", "COPY_3D", "HOLE_DRILL", "HOLE_PRECISION", "THREAD_INTERNAL") for f in feats)
+    part_type_v: Literal["SHAFT_TURNED", "PRISMATIC_MILLED", "MILL_TURN"] = (
+        "MILL_TURN" if (has_turn_v and has_mill_v) else ("PRISMATIC_MILLED" if has_mill_v else "SHAFT_TURNED")
+    )
+
     return DrawingSpec(
         part_name=str(data.get("part_name") or filename),
-        part_type="MILL_TURN",
+        part_type=part_type_v,
         material_raw=str(data.get("material_text") or mat_disp),
         material_subgroup=sg,
         iso_group=grp,  # type: ignore[arg-type]

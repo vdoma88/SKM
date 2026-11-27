@@ -23,6 +23,7 @@ from app.cad_workpiece import generate_demo_step_file, parse_step_workpiece, par
 from app.drawing_analyzer import (
     DEMO_BLUEPRINTS, DrawingAnalyzeRequest, DrawingFeature, DrawingSpec,
     _build_openai_attempts, _build_vision_endpoint, _extract_json_object, _extract_openai_text,
+    _normalize_vision_features,
     analyze_uploaded_drawing, detect_vision_provider,
     parse_dxf_blueprint, recommend_tooling_for_blueprint,
 )
@@ -797,6 +798,28 @@ def test_drawing_shaft_h6_vs_hole_H7_and_small_holes():
     assert lbl_or == "OpenRouter Free" and att_or[0][1] == "nvidia/nemotron-3.5-super-vl:free"
     txt_r, err_r = _extract_openai_text({"choices": [{"message": {"content": None, "refusal": "policy"}}]}) 
     assert txt_r == "" and "Отказ" in (err_r or "")
+    # Verify Vision AI post-processor cleans up lathe chamfers/steps, upgrades H7 bore, and merges turning passes
+    raw_vis = [
+        DrawingFeature(id="v1", kind="EXTERNAL_ROUGH", title="Наружный диаметр Ø58", diameter_mm=58.0),
+        DrawingFeature(id="v2", kind="EXTERNAL_FINISH", title="Наружный диаметр Ø52", diameter_mm=52.0, ra_um=6.3),
+        DrawingFeature(id="v3", kind="EXTERNAL_FINISH", title="Наружный диаметр Ø50", diameter_mm=50.0, ra_um=0.8),
+        DrawingFeature(id="v4", kind="INTERNAL_BORE", title="Внутренний диаметр Ø41", diameter_mm=41.0),
+        DrawingFeature(id="v5", kind="INTERNAL_BORE", title="Внутренний диаметр Ø34", diameter_mm=34.0),
+        DrawingFeature(id="v6", kind="INTERNAL_BORE", title="Внутренний диаметр Ø32", diameter_mm=32.0, tolerance="H7"),
+        DrawingFeature(id="v7", kind="GROOVE_PARTING", title="Паз Ø6", width_mm=6.0),
+        DrawingFeature(id="v8", kind="HOLE_DRILL", title="Отверстие Ø2", diameter_mm=2.0, count=2),
+        DrawingFeature(id="v9", kind="FACE_MILL", title="Фаска 1x45°"),
+        DrawingFeature(id="v10", kind="SHOULDER_POCKET", title="Ступень Ø10", diameter_mm=10.0),
+        DrawingFeature(id="v11", kind="SHOULDER_POCKET", title="Ступень Ø22", diameter_mm=22.0),
+    ]
+    norm_vis = _normalize_vision_features(raw_vis)
+    norm_kinds = [f.kind for f in norm_vis]
+    assert "FACE_MILL" not in norm_kinds and "SHOULDER_POCKET" not in norm_kinds
+    assert norm_kinds.count("EXTERNAL_FINISH") == 1
+    assert norm_kinds.count("INTERNAL_BORE") == 1
+    assert any(f.kind == "HOLE_PRECISION" and f.diameter_mm == 32.0 and f.tolerance == "H7" for f in norm_vis)
+    assert len(norm_vis) == 6
+
     assert _extract_json_object("```json\n{\"part_name\":\"Втулка\"}\n```")["part_name"] == "Втулка"
 
 
@@ -822,4 +845,4 @@ if __name__ == "__main__":
     test_cad3d_step_brep_feature_recognition_and_tooling_kit()
     test_cad3d_stl_mesh_analyzer_and_housing_step()
     test_drawing_shaft_h6_vs_hole_H7_and_small_holes()
-    print("ALL SKM v2.3.9 GROQ QWEN3.8 + OPENROUTER NEMOTRON VL TESTS (21 SUITES) PASSED!")
+    print("ALL SKM v2.3.10 CLEAN VISION BOM + 3D CAD TESTS (21 SUITES) PASSED!")
