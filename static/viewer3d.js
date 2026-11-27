@@ -50,7 +50,7 @@
       }
       return pts;
     }
-    if (shape === "A") {
+    if (shape === "A" || shape === "E") {
       const hHalf = Math.max(length || ic * 1.3, ic * 1.1) / 2;
       const skew = hHalf / Math.tan((85 * Math.PI) / 180);
       return [
@@ -64,8 +64,8 @@
       const hHalf = Math.max(length || ic * 1.3, ic * 1.1) / 2;
       return [[r, hHalf], [-r, hHalf], [-r, -hHalf], [r, -hHalf]];
     }
-    if (shape === "P" || shape === "H" || shape === "O") {
-      const n = shape === "P" ? 5 : shape === "H" ? 6 : 8;
+    if (shape === "P" || shape === "H" || shape === "O" || shape === "X") {
+      const n = shape === "P" ? 5 : shape === "H" ? 6 : shape === "X" ? 7 : 8;
       const rv = r / Math.cos(Math.PI / n);
       const pts = [];
       for (let k = 0; k < n; k++) {
@@ -490,6 +490,8 @@
     const method = (coatingMethod || "CVD").toUpperCase();
     if (comp.includes("CBN")) return { hex: 0x353b45, css: "#4b5563", metalness: 0.65, roughness: 0.36, label: "CBN (графит)" };
     if (method === "UNCOATED" || comp.includes("POLISHED")) return { hex: 0xd4dde8, css: "#cbd5e1", metalness: 0.90, roughness: 0.16, label: "Полированный твёрдый сплав" };
+    if (comp.includes("SILVER")) return { hex: 0xb8c4d0, css: "#b8c4d0", metalness: 0.82, roughness: 0.22, label: "HARDTOOL PVD AlTiN (серебристый)" };
+    if (comp.includes("BRONZE")) return { hex: 0xa47158, css: "#a47158", metalness: 0.78, roughness: 0.24, label: "HARDTOOL PVD TiSiN+X (бронзовый)" };
     if (method === "PVD" && comp.includes("S")) return { hex: 0x8b6f4e, css: "#a1805a", metalness: 0.74, roughness: 0.28, label: "PVD TiAlSiN (бронза)" };
     if (method === "PVD") return { hex: 0x524c66, css: "#6d658a", metalness: 0.72, roughness: 0.28, label: "PVD AlTiN (антрацит)" };
     return { hex: 0xd9ad45, css: "#d9ad45", metalness: 0.78, roughness: 0.25, label: "CVD TiN / Al2O3 (золото)" };

@@ -98,10 +98,10 @@ def test_repository_memory_seed_and_cross_references():
     assert repo.mode == "memory_seed"
     meta = repo.get_meta()
     assert len(meta["material_subgroups"]) == 12
-    assert len(repo.list_inserts()) == 36
-    assert len(repo.list_inserts("TURNING")) == 12
-    assert len(repo.list_inserts("MILLING")) == 4
-    assert len(repo.list_inserts("DRILLING")) == 18
+    assert len(repo.list_inserts()) == 55
+    assert len(repo.list_inserts("TURNING")) == 18
+    assert len(repo.list_inserts("MILLING")) == 12
+    assert len(repo.list_inserts("DRILLING")) == 20
 
     xrefs = repo.get_cross_references("ins-1")
     assert len(xrefs) >= 2
@@ -366,7 +366,7 @@ def test_taylor_economics_and_warehouse_csv():
     # Warehouse CSV parsing (sample + Russian headers)
     sample_csv = generate_sample_stock_csv()
     parsed = parse_stock_csv(sample_csv)
-    assert len(parsed) == 27
+    assert len(parsed) == 46
     assert any(i.normalized_code == "CNMG120408" and i.qty == 40 for i in parsed)
 
     ru_csv = "Пластина;Сплав;Остаток;Цена;Ячейка\nWNMG 080408;GEN-P25-CVD;15;720,5;B-02\n"
@@ -376,7 +376,7 @@ def test_taylor_economics_and_warehouse_csv():
     assert parsed_ru[0].unit_price_rub == 720.5
 
     repo = ToolingRepository(db_url="")
-    assert len(repo.list_inserts("GROOVING_THREADING")) == 2
+    assert len(repo.list_inserts("GROOVING_THREADING")) == 5
     saved_asm = repo.create_assembly({"name": "Test Setup", "iso_code": "CNMG 120408"})
     assert len(repo.list_assemblies()) == 1
     assert repo.delete_assembly(saved_asm["id"]) is True
@@ -587,7 +587,7 @@ def test_cnc_gcode_generator_fanuc_and_siemens():
 def test_sales_catalog_search_filters_pricing_and_upsell():
     repo = ToolingRepository(db_url="")
     all_items = build_sales_catalog(repo)
-    assert len(all_items) == 36
+    assert len(all_items) == 55
 
     # Russian alloy/material synonym search ("нержавейка" -> M group, "д16т" -> N group)
     ss_items = build_sales_catalog(repo, q="нержавейка", only_in_stock=True)
@@ -705,10 +705,10 @@ def test_drawing_demo_blueprints_shared_tools_and_hardened_cbn():
         DrawingAnalyzeRequest(filename=housing["filename"], notes_text=housing["notes_text"], batch_qty=100),
     )
     assert res_n.plan.spec.iso_group == "N"
-    apkt_lines = [ln for ln in res_n.plan.kit_lines if ln.iso_code == "APKT 160408-AL"]
-    assert len(apkt_lines) == 2
-    assert apkt_lines[0].line_total_rub > 0 and apkt_lines[1].line_total_rub == 0.0
-    assert apkt_lines[1].shared_with_step == apkt_lines[0].step_no
+    al_mill_lines = [ln for ln in res_n.plan.kit_lines if ln.operation_domain == "MILLING"]
+    assert len(al_mill_lines) == 2
+    assert al_mill_lines[0].line_total_rub > 0 and al_mill_lines[1].line_total_rub == 0.0
+    assert al_mill_lines[1].shared_with_step == al_mill_lines[0].step_no
     assert any(ln.iso_code == "FORM-M8" for ln in res_n.plan.kit_lines)
     assert any(ln.iso_code == "SC-DRL-100-AL" for ln in res_n.plan.kit_lines)
 
@@ -764,7 +764,7 @@ def test_cad3d_stl_mesh_analyzer_and_housing_step():
     assert resp_h.cad3d_summary["bbox_y_mm"] == 100.0
     assert resp_h.cad3d_summary["bbox_z_mm"] == 45.0
     assert resp_h.plan.spec.iso_group == "N"
-    assert any(ln.iso_code == "APKT 160408-AL" for ln in resp_h.plan.kit_lines)
+    assert any(ln.iso_code in ("SEHT 1204AFFN", "APKT 160408-AL") for ln in resp_h.plan.kit_lines)
 
     # STL workpiece analyzer (using generated ASCII STL)
     stl_bytes = export_iso1832_stl("SC-DRL-120-8D").encode("utf-8")
@@ -823,6 +823,48 @@ def test_drawing_shaft_h6_vs_hole_H7_and_small_holes():
     assert _extract_json_object("```json\n{\"part_name\":\"Втулка\"}\n```")["part_name"] == "Втулка"
 
 
+def test_hardtool_2025_catalog_parser_3d_sales_and_blueprint():
+    repo = ToolingRepository(db_url="")
+    # 1. Parse HARDTOOL 2025 milling, turning, grooving & micro-boring codes + 3D meshes
+    for code, min_edges in (
+        ("CNMG 120408-CM", 4),
+        ("WNMG 080408-CTM", 6),
+        ("DNMG 150604-CF", 4),
+        ("EDHT 0402ER-CM", 2),
+        ("LNMU 0303ZER-CM", 4),
+        ("LNHX 11T408AFN", 4),
+        ("SDKT 093508-CM", 4),
+        ("WNMU 060610-SN", 6),
+        ("ONMU 0605ANSN", 16),
+        ("APMT 1604PDER-M2", 2),
+        ("SEHT 1204AFFN", 4),
+        ("CD200-300M", 2),
+        ("CBGR-060", 1),
+        ("SPMT 090408-HT", 4),
+    ):
+        p = parse_iso1832(code)
+        assert p.valid is True, f"HARDTOOL parse failed for {code}: {p.error}"
+        assert p.cutting_edges_count == min_edges, f"{code}: {p.cutting_edges_count} != {min_edges}"
+        mesh = build_iso1832_mesh(code)
+        assert mesh.triangle_count >= 100
+
+    # 2. Sales catalog brand filter & HARDTOOL alloy search
+    ht_items = build_sales_catalog(repo, brand="HARDTOOL")
+    assert len(ht_items) == 19
+    assert all(i.brand == "HARDTOOL" and i.in_stock for i in ht_items)
+    pms_items = build_sales_catalog(repo, q="H9760PMS")
+    assert len(pms_items) >= 6
+
+    # 3. Blueprint kit on bushing with prefer_brand="HARDTOOL" picks HARDTOOL inserts (RE 0.4 DNMG-CF for Ra 0.8!)
+    tt = "Втулка Ст45, наруж. Ø58 и Ø50 h6, L=70, Ra 0.8, отв. Ø32 H7, внутр. расточка Ø42, канавка шир. 6 мм, 2 отв. Ø2"
+    resp = analyze_uploaded_drawing(repo, DrawingAnalyzeRequest(filename="bushing.txt", notes_text=tt, batch_qty=50, prefer_brand="HARDTOOL"))
+    codes = [ln.iso_code for ln in resp.plan.kit_lines]
+    assert "WNMG 080408-CTM" in codes
+    assert "DNMG 150604-CF" in codes
+    assert "CCMT 09T304-XM1" in codes
+    assert "MGMN 300-M" in codes
+
+
 if __name__ == "__main__":
     test_iso1832_pg_rounding_and_expanded_codes()
     test_kienzle_turning_and_milling()
@@ -845,4 +887,5 @@ if __name__ == "__main__":
     test_cad3d_step_brep_feature_recognition_and_tooling_kit()
     test_cad3d_stl_mesh_analyzer_and_housing_step()
     test_drawing_shaft_h6_vs_hole_H7_and_small_holes()
-    print("ALL SKM v2.3.10 CLEAN VISION BOM + 3D CAD TESTS (21 SUITES) PASSED!")
+    test_hardtool_2025_catalog_parser_3d_sales_and_blueprint()
+    print("ALL SKM v2.4.0 HARDTOOL 2025 CATALOG + 3D CAD TESTS (22 SUITES) PASSED!")

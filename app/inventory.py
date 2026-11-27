@@ -51,6 +51,26 @@ DEFAULT_STOCK_ITEMS: List[Dict[str, Any]] = [
     {"iso_code": "REAM-H7-100", "grade_code": "GEN-DRL-UNIV", "qty": 6, "unit_price_rub": 2890.0, "bin_location": "G-01-1", "supplier": "Склад-Точные"},
     {"iso_code": "REAM-H7-200", "grade_code": "GEN-DRL-UNIV", "qty": 3, "unit_price_rub": 4200.0, "bin_location": "G-01-2", "supplier": "Склад-Точные"},
     {"iso_code": "FBORE-MIC-25", "grade_code": "GEN-M25-PVD", "qty": 2, "unit_price_rub": 3450.0, "bin_location": "G-02-1", "supplier": "Склад-Точные"},
+    # HARDTOOL 2025 Warehouse Stock
+    {'iso_code': 'CNMG 120408-CM', 'grade_code': 'H9760PMS', 'qty': 50, 'unit_price_rub': 650.0, 'bin_location': 'H-01-1', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'WNMG 080408-CTM', 'grade_code': 'H7270PK', 'qty': 60, 'unit_price_rub': 680.0, 'bin_location': 'H-01-2', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'DNMG 150604-CF', 'grade_code': 'H9960MSH', 'qty': 40, 'unit_price_rub': 790.0, 'bin_location': 'H-01-3', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'VNMG 160404-AU', 'grade_code': 'H9960MSH', 'qty': 30, 'unit_price_rub': 860.0, 'bin_location': 'H-01-4', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'SNMG 120412-GH', 'grade_code': 'H7820K', 'qty': 40, 'unit_price_rub': 710.0, 'bin_location': 'H-01-5', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'CCMT 09T304-XM1', 'grade_code': 'H9760PM', 'qty': 40, 'unit_price_rub': 590.0, 'bin_location': 'H-01-6', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'EDHT 0402ER-CM', 'grade_code': 'H9660PMSH', 'qty': 30, 'unit_price_rub': 620.0, 'bin_location': 'H-02-1', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'LNMU 0303ZER-CM', 'grade_code': 'H9760PMS', 'qty': 50, 'unit_price_rub': 740.0, 'bin_location': 'H-02-2', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'LNHX 11T408AFN', 'grade_code': 'H9760PMS', 'qty': 40, 'unit_price_rub': 770.0, 'bin_location': 'H-02-3', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'SDKT 093508-CM', 'grade_code': 'H9760PMS', 'qty': 30, 'unit_price_rub': 830.0, 'bin_location': 'H-02-4', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'WNMU 060610-SN', 'grade_code': 'H9760PM', 'qty': 40, 'unit_price_rub': 810.0, 'bin_location': 'H-02-5', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'ONMU 0605ANSN', 'grade_code': 'H9280PMSH', 'qty': 30, 'unit_price_rub': 1080.0, 'bin_location': 'H-02-6', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'APMT 1604PDER-M2', 'grade_code': 'H9760PMS', 'qty': 50, 'unit_price_rub': 730.0, 'bin_location': 'H-02-7', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'SEHT 1204AFFN', 'grade_code': 'H040N', 'qty': 20, 'unit_price_rub': 820.0, 'bin_location': 'H-02-8', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'CD200-300M', 'grade_code': 'H7170P', 'qty': 30, 'unit_price_rub': 680.0, 'bin_location': 'H-03-1', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'MGMN 300-M', 'grade_code': 'H9760PMS', 'qty': 40, 'unit_price_rub': 620.0, 'bin_location': 'H-03-2', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'CBGR-060', 'grade_code': 'H9760PM', 'qty': 6, 'unit_price_rub': 2350.0, 'bin_location': 'H-03-3', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'SPMT 090408-HT', 'grade_code': 'H9760PMS', 'qty': 30, 'unit_price_rub': 810.0, 'bin_location': 'H-04-1', 'supplier': 'HARDTOOL 2025'},
+    {'iso_code': 'WCMX 050308-HT', 'grade_code': 'H9960MSH', 'qty': 20, 'unit_price_rub': 730.0, 'bin_location': 'H-04-2', 'supplier': 'HARDTOOL 2025'},
 ]
 
 

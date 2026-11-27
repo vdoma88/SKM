@@ -23,6 +23,8 @@ SHAPES: Dict[str, Dict[str, Any]] = {
     "H": {"name": "Шестиугольник 120°", "angle_deg": 120, "edges_single": 6, "ic_factor": 1.732},
     "O": {"name": "Восьмиугольник 135°", "angle_deg": 135, "edges_single": 8, "ic_factor": 2.414},
     "L": {"name": "Прямоугольник 90°", "angle_deg": 90, "edges_single": 2, "ic_factor": 0.600},
+    "E": {"name": "Параллелограмм 75° (High-Feed)", "angle_deg": 75, "edges_single": 2, "ic_factor": 0.650},
+    "X": {"name": "Семиугольник / Спец. (14 кр.)", "angle_deg": 128, "edges_single": 7, "ic_factor": 1.850},
     "DRL": {"name": "Осевое сверло (2-зубое)", "angle_deg": 140, "edges_single": 2, "ic_factor": 1.000},
     "TAP": {"name": "Метчик / Резьбофреза", "angle_deg": 60, "edges_single": 4, "ic_factor": 1.000},
     "RM":  {"name": "Развёртка H7 / Чист. расточка", "angle_deg": 90, "edges_single": 6, "ic_factor": 1.000},
@@ -57,7 +59,8 @@ FIXING_TYPES: Dict[str, Dict[str, Any]] = {
     "W": {"desc": "Отверстие с зенковкой 40–60°, без стружколома", "double_sided": False},
     "A": {"desc": "Цилиндрическое отверстие, без стружколома (CBN/керамика)", "double_sided": True},
     "N": {"desc": "Без отверстия, без стружколома (прихват сверху)", "double_sided": True},
-    "X": {"desc": "Специальное исполнение (сверлильная/фрезерная геометрия)", "double_sided": False},
+    "X": {"desc": "Специальное исполнение (сверлильная/фрезерная геометрия)", "double_sided": True},
+    "U": {"desc": "Цилиндрическое отв., двусторонняя фрезерная (винт)", "double_sided": True},
 }
 
 # Standard IC lookup table by (shape, edge_code) in mm
@@ -75,14 +78,14 @@ STANDARD_IC_MM: Dict[tuple, float] = {
 # Standard thickness code -> mm
 THICKNESS_MM: Dict[str, float] = {
     "01": 1.59, "T1": 1.98, "02": 2.38, "03": 3.18, "T3": 3.97,
-    "04": 4.76, "05": 5.56, "06": 6.35, "07": 7.94, "09": 9.52,
+    "35": 3.57, "T4": 4.37, "04": 4.76, "05": 5.56, "06": 6.35, "T6": 6.35, "07": 7.94, "09": 9.52,
 }
 
 # Standard corner radius code -> mm
 RADIUS_MM: Dict[str, float] = {
     "00": 0.0, "02": 0.2, "04": 0.4, "08": 0.8, "12": 1.2,
     "16": 1.6, "20": 2.0, "24": 2.4, "32": 3.2,
-    "M0": 0.0,
+    "M0": 0.0, "MO": 0.0, "PD": 0.8, "AF": 0.8, "AN": 0.8, "ER": 1.5, "ZE": 1.2, "10": 1.0,
 }
 
 
@@ -124,6 +127,76 @@ class ISO1832Parsed(BaseModel):
 def _parse_special_grooving_threading(raw: str, core: str, suffix: Optional[str]) -> Optional[ISO1832Parsed]:
     core_nodash = re.sub(r"[^A-Za-z0-9]", "", raw).upper()
     """Parses standard industry Grooving (MGMN 200/300/400) and Threading (16ER/16IR AG60) codes."""
+    # HARDTOOL CD grooving inserts: e.g. CD200-300M, CD200-200S
+    m_cd = re.match(r"^CD2\d{2}(\d{3})([MS])?$", core_nodash)
+    if m_cd:
+        w_code = m_cd.group(1)
+        w_mm = round(int(w_code) / 100.0, 2)
+        geo = m_cd.group(2) or "M"
+        pocket = f"L-N-{_round_half_up_x100(w_mm)}-476-N"
+        return ISO1832Parsed(
+            raw_code=raw,
+            normalized_code=core_nodash,
+            valid=True,
+            shape_code="L",
+            shape_name=f"Канавочная HARDTOOL CD (w={w_mm:g} мм, 2 кр.)",
+            clearance_angle_code="N",
+            clearance_angle_deg=0.0,
+            tolerance_class="G",
+            fixing_type_code="N",
+            ic_mm=w_mm,
+            cutting_edge_length_mm=20.0,
+            thickness_mm=4.76,
+            corner_radius_mm=0.2,
+            is_double_sided=True,
+            cutting_edges_count=2,
+            suffix=geo,
+            seat_pocket_signature=pocket,
+            segments=[
+                ISO1832Segment(position=1, label="Серия", code="CD2", meaning="HARDTOOL наруж./торц./внутр. канавки", color="#38BDF8"),
+                ISO1832Segment(position=2, label="Ширина (W)", code=w_code, meaning=f"{w_mm:g} мм", color="#FB7185"),
+                ISO1832Segment(position=3, label="Кромка", code=geo, meaning="Прочная (сталь/чугун)" if geo == "M" else "Острая (нерж./жаропр.)", color="#FBBF24"),
+                ISO1832Segment(position=4, label="Кромок", code="2", meaning="2 режущие кромки", color="#2DD4BF"),
+            ],
+        )
+
+    # HARDTOOL Solid Carbide Micro-Boring / Internal Grooving Bars: CBGR-060, CBFR-040, CBIR-060
+    m_cb = re.match(r"^(CB[FPTNQGIV]R)(\d{3})([A-Z0-9]+)?$", core_nodash)
+    if m_cb:
+        series, d_str, tag = m_cb.groups()
+        d_mm = round(int(d_str) / 10.0, 2)
+        purpose = {
+            "CBFR": "Универсальный расточной ЦТ-резец",
+            "CBGR": "Внутренний канавочный ЦТ-резец (до 7xD)",
+            "CBIR": "Внутренний резьбовой ЦТ-резец 60°",
+            "CBVR": "Торцовый канавочный ЦТ-резец",
+        }.get(series, "Монолитный ЦТ-резец HARDTOOL")
+        pocket = f"RM-B-{_round_half_up_x100(d_mm)}-700-I"
+        return ISO1832Parsed(
+            raw_code=raw,
+            normalized_code=core_nodash,
+            valid=True,
+            shape_code="RM",
+            shape_name=f"{purpose} (Dmin={d_mm:g} мм)",
+            clearance_angle_code="P",
+            clearance_angle_deg=11.0,
+            tolerance_class="G",
+            fixing_type_code="N",
+            ic_mm=d_mm,
+            cutting_edge_length_mm=round(d_mm * 5.0, 1),
+            thickness_mm=round(d_mm * 1.2, 2),
+            corner_radius_mm=0.2,
+            is_double_sided=False,
+            cutting_edges_count=1,
+            suffix=tag or "7D",
+            seat_pocket_signature=pocket,
+            segments=[
+                ISO1832Segment(position=1, label="Серия", code=series, meaning=purpose, color="#38BDF8"),
+                ISO1832Segment(position=2, label="Dmin отв.", code=d_str, meaning=f"от Ø{d_mm:g} мм", color="#FB7185"),
+                ISO1832Segment(position=3, label="Вылет / СОЖ", code="7xD", meaning="Внутр. СОЖ, 3-точечный зажим CBR", color="#34D399"),
+            ],
+        )
+
     # Grooving / Parting: e.g. MGMN 300, MGMN 200, MGMN 400
     m_grv = re.match(r"^MGMN(\d{3})", core)
     if m_grv:

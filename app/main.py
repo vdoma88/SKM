@@ -42,7 +42,7 @@ from app.sales import (
 
 app = FastAPI(
     title="SKM · ISO Tooling Selector API",
-    version="2.3.11",
+    version="2.4.0",
     description=(
         "Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics, "
         "Taylor tool-life economics, shop-floor warehouse stock, 3D STL/STEP geometry, "
@@ -98,6 +98,8 @@ class CrossRefItem(BaseModel):
 class CandidateResult(BaseModel):
     insert_id: str
     iso_code: str
+    brand: str = "ISO Generic"
+    catalog_page: str = ""
     grade_code: str
     coating_method: str
     coating_composition: str
@@ -206,7 +208,7 @@ def health():
     raw_key = resolve_vision_api_key()
     return {
         "status": "ok",
-        "version": "2.3.11",
+        "version": "2.4.0",
         "storage_mode": repo.mode,
         "vision_configured": bool(raw_key),
         "vision_provider": detect_vision_provider(raw_key),
@@ -402,6 +404,8 @@ def api_select(req: SelectionRequest):
             CandidateResult(
                 insert_id=ins["id"],
                 iso_code=ins["iso_code"],
+                brand=ins.get("brand") or "ISO Generic",
+                catalog_page=ins.get("catalog_page") or "",
                 grade_code=ins["grade_code"],
                 coating_method=ins["coating_method"],
                 coating_composition=ins["coating_composition"],
@@ -565,6 +569,7 @@ def api_sales_catalog(
     application_class: Optional[str] = Query(None, description="FINISHING, MEDIUM, ROUGHING или ALL"),
     only_in_stock: bool = Query(False),
     pocket: Optional[str] = Query(None),
+    brand: Optional[str] = Query(None, description="ALL, HARDTOOL или ISO Generic"),
     sort_by: Literal["relevance", "price_asc", "edge_price_asc", "stock_desc"] = Query("relevance"),
 ):
     return build_sales_catalog(
@@ -575,6 +580,7 @@ def api_sales_catalog(
         application_class=application_class,
         only_in_stock=only_in_stock,
         pocket=pocket,
+        brand=brand,
         sort_by=sort_by,
     )
 

@@ -65,6 +65,9 @@ SEARCH_SYNONYMS: Dict[str, List[str]] = {
 class SalesCatalogItem(BaseModel):
     insert_id: str
     iso_code: str
+    brand: str = "ISO Generic"
+    catalog_page: str = ""
+    analog_note: str = ""
     shape_code: str
     operation_domain: str
     operation_label_ru: str
@@ -151,6 +154,8 @@ class OrderQuoteResponse(BaseModel):
 
 
 def _determine_pack_qty(ins: Dict[str, Any]) -> int:
+    if str(ins.get("iso_code", "")).upper().startswith("CB"):
+        return 1
     sub = ins.get("axial_subtype")
     if sub in ("SOLID_CARBIDE", "TAP_THREAD_MILL", "REAMER_FINE_BORE"):
         return 1
@@ -199,6 +204,9 @@ def _matches_query(ins: Dict[str, Any], q: str, primary: List[str], secondary: L
     haystack = " ".join(
         [
             str(ins.get("iso_code", "")),
+            str(ins.get("brand", "ISO Generic")),
+            str(ins.get("catalog_page", "")),
+            str(ins.get("analog_note", "")),
             str(ins.get("grade_code", "")),
             str(ins.get("chipbreaker_code", "")),
             str(ins.get("seat_pocket_signature", "")),
@@ -229,6 +237,8 @@ def _matches_query(ins: Dict[str, Any], q: str, primary: List[str], secondary: L
         return True
     if any(w in ql for w in ("канав", "отрез", "резьб")) and ins.get("operation_domain") == "GROOVING_THREADING":
         return True
+    if any(w in ql for w in ("hardtool", "хардтул", "техноинструмент")) and ins.get("brand") == "HARDTOOL":
+        return True
     return False
 
 
@@ -240,6 +250,7 @@ def build_sales_catalog(
     application_class: Optional[str] = None,
     only_in_stock: bool = False,
     pocket: Optional[str] = None,
+    brand: Optional[str] = None,
     sort_by: Literal["relevance", "price_asc", "edge_price_asc", "stock_desc"] = "relevance",
 ) -> List[SalesCatalogItem]:
     inserts = repo.list_inserts()
@@ -262,6 +273,9 @@ def build_sales_catalog(
             elif application_class != "ROUGHING" and app_val != application_class:
                 continue
         if pocket and ins.get("seat_pocket_signature") != pocket:
+            continue
+        ins_brand = ins.get("brand") or "ISO Generic"
+        if brand and brand != "ALL" and ins_brand != brand:
             continue
         if not _matches_query(ins, q, primary, secondary):
             continue
@@ -288,6 +302,9 @@ def build_sales_catalog(
             SalesCatalogItem(
                 insert_id=ins["id"],
                 iso_code=ins["iso_code"],
+                brand=ins.get("brand") or "ISO Generic",
+                catalog_page=ins.get("catalog_page") or "",
+                analog_note=ins.get("analog_note") or "",
                 shape_code=ins.get("shape_code", "C"),
                 operation_domain=ins["operation_domain"],
                 operation_label_ru=OP_LABELS_RU.get(ins["operation_domain"], ins["operation_domain"]),

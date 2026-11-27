@@ -77,7 +77,7 @@ def _raw_polygon_vertices(parsed: ISO1832Parsed) -> List[Tuple[float, float]]:
             pts.append((r_obt * math.cos(a_obt), r_obt * math.sin(a_obt)))
         return pts
 
-    if shape == "A":
+    if shape in ("A", "E"):
         # 85° parallelogram (e.g. APKT 160408): width ~ IC, height ~ L
         w_half = r
         h_half = max(length, ic * 1.1) / 2.0
@@ -94,8 +94,8 @@ def _raw_polygon_vertices(parsed: ISO1832Parsed) -> List[Tuple[float, float]]:
         h_half = max(length, ic * 1.1) / 2.0
         return [(w_half, h_half), (-w_half, h_half), (-w_half, -h_half), (w_half, -h_half)]
 
-    if shape in ("P", "H", "O"):
-        n_sides = {"P": 5, "H": 6, "O": 8}[shape]
+    if shape in ("P", "H", "O", "X"):
+        n_sides = {"P": 5, "H": 6, "O": 8, "X": 7}[shape]
         rv = r / math.cos(math.pi / n_sides)
         return [
             (rv * math.cos(2.0 * math.pi * k / n_sides), rv * math.sin(2.0 * math.pi * k / n_sides))

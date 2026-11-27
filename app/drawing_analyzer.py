@@ -80,6 +80,7 @@ class DrawingSpec(BaseModel):
     batch_qty: int = Field(50, ge=1, le=100000)
     stability: Literal["STABLE", "INTERRUPTED", "UNSTABLE"] = "STABLE"
     include_holders: bool = True
+    prefer_brand: Literal["HARDTOOL", "ALL", "ISO Generic"] = "HARDTOOL"
     features: List[DrawingFeature] = []
 
 
@@ -90,6 +91,8 @@ class ToolingKitLine(BaseModel):
     feature_summary: str
     insert_id: str
     iso_code: str
+    brand: str = "ISO Generic"
+    catalog_page: str = ""
     shape_code: str
     operation_domain: str
     grade_code: str
@@ -129,6 +132,7 @@ class DrawingAnalyzeRequest(BaseModel):
     batch_qty: int = Field(50, ge=1, le=100000)
     stability: Literal["STABLE", "INTERRUPTED", "UNSTABLE"] = "STABLE"
     include_holders: bool = True
+    prefer_brand: Literal["HARDTOOL", "ALL", "ISO Generic"] = "HARDTOOL"
     gemini_api_key: Optional[str] = None
 
 
@@ -756,7 +760,7 @@ def _build_openai_attempts(provider: str, clean_key: str) -> Tuple[str, List[Tup
         "Content-Type": "application/json",
         "Accept": "application/json",
         "Authorization": f"Bearer {clean_key}",
-        "User-Agent": "SKM-Tooling-Selector/2.3.11",
+        "User-Agent": "SKM-Tooling-Selector/2.4.0",
     }
 
     if provider == "groq_free":
@@ -1110,7 +1114,7 @@ def analyze_blueprint_with_gemini_vision(
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json", "User-Agent": "SKM-Tooling-Selector/2.3.11"},
+                headers={"Content-Type": "application/json", "User-Agent": "SKM-Tooling-Selector/2.4.0"},
                 method="POST",
             )
             try:
@@ -1219,6 +1223,7 @@ def _pick_best_insert(
     target_diam_mm: Optional[float] = None,
     target_ld: Optional[float] = None,
     prefer_holder_cat: Optional[str] = None,
+    prefer_brand: str = "HARDTOOL",
     repo: Any = None,
 ) -> Dict[str, Any]:
     pool = [i for i in inserts if i["operation_domain"] == domain]
@@ -1242,7 +1247,7 @@ def _pick_best_insert(
         if prefer_codes:
             for idx, pcode in enumerate(prefer_codes):
                 if ins["iso_code"].upper().startswith(pcode.upper()):
-                    s += 45 - idx * 5
+                    s += 55 - idx * 5
                     break
 
         if prefer_app and ins.get("application_class") == prefer_app:
@@ -1262,6 +1267,11 @@ def _pick_best_insert(
             else:
                 s -= 15
 
+        ins_brand = ins.get("brand") or "ISO Generic"
+        if prefer_brand == "HARDTOOL" and ins_brand == "HARDTOOL":
+            s += 30
+        elif prefer_brand == "ISO Generic" and ins_brand == "ISO Generic":
+            s += 28
         if repo is not None:
             st = repo.get_stock_match(ins["iso_code"], ins["grade_code"])
             if st and int(st.get("qty", 0)) > 0:
@@ -1305,36 +1315,36 @@ def recommend_tooling_for_blueprint(repo: Any, spec: DrawingSpec) -> DrawingTool
 
         if feat.kind == "EXTERNAL_ROUGH":
             if iso_g == "H":
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["CNGA"], repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["CNGA"], prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = f"Закалённая сталь ({spec.hardness_hrc or 52:g} HRC): CBN-пластина для твёрдого точения насухо."
             elif iso_g == "K":
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["SNMG", "WNMG"], prefer_app="ROUGHING", repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["SNMG", "WNMG"], prefer_app="ROUGHING", prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = "Чугун: 8-кромочная SNMG с толстым Al2O3 даёт минимальную цену за кромку."
             elif iso_g == "N":
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["CCGT", "DCMT"], repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["CCGT", "DCMT"], prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = "Алюминий/цветмет: полированная острая кромка без покрытия исключает нарост."
             elif iso_g == "M":
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["WNMG 080412", "CNMG 120404"], prefer_app="ROUGHING", repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["WNMG 080412", "CNMG 120404"], prefer_app="ROUGHING", prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = "Нержавейка: вязкий сплав и усиленная кромка для чернового/получистового съёма."
             elif spec.stability == "INTERRUPTED":
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["WNMG 080412", "CNMG 120408"], prefer_app="ROUGHING", repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["WNMG 080412", "CNMG 120408"], prefer_app="ROUGHING", prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = "Ударная/черновая обработка: усиленная кромка R1.2 и 6 кромок WNMG."
             else:
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["WNMG 080408", "CNMG 120408"], prefer_app="MEDIUM", repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["WNMG 080408-CTM", "CNMG 120408-CM", "WNMG 080408", "CNMG 120408"], prefer_app="MEDIUM", prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = f"Оптимальный баланс съёма и цены за кромку (6 кр.) для материала {spec.material_subgroup}."
 
         elif feat.kind == "EXTERNAL_FINISH":
             if iso_g == "H":
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["CNGA"], repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["CNGA"], prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = "Финишное твёрдое точение CBN (Ra ≤ 0.8 мкм вместо шлифования)."
             elif iso_g == "N":
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["CCGT", "DCMT"], prefer_app="FINISHING", repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["CCGT", "DCMT"], prefer_app="FINISHING", prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = "Зеркально полированная пластина RE 0.4 для чистой поверхности по цветмету."
             elif iso_g in ("M", "S"):
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["VNMG", "CNMG 120404"], prefer_app="FINISHING", repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["VNMG", "CNMG 120404"], prefer_app="FINISHING", prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = "Острый PVD-сплав с RE 0.4 для чистового прохода по нерж./титану без наклёпа."
             else:
-                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["CNMG 120404", "DNMG", "TNMG"], prefer_app="FINISHING", repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "TURNING", prefer_codes=["DNMG 150604-CF", "CNMG 120404", "DNMG", "TNMG"], prefer_app="FINISHING", prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = f"Чистовая пластина под требование Ra {feat.ra_um or spec.ra_min_um or 1.6:g} мкм."
 
         elif feat.kind == "INTERNAL_BORE":
@@ -1347,11 +1357,11 @@ def recommend_tooling_for_blueprint(repo: Any, spec: DrawingSpec) -> DrawingTool
             rationale = f"Позитивная 7° пластина для внутреннего растачивания Ø{feat.diameter_mm or 30:g} (низкие радиальные силы)."
 
         elif feat.kind == "GROOVE_PARTING":
-            ins = _pick_best_insert(inserts, iso_g, "GROOVING_THREADING", prefer_codes=["MGMN"], repo=repo)
+            ins = _pick_best_insert(inserts, iso_g, "GROOVING_THREADING", prefer_codes=["MGMN 300-M", "CD200-300M", "MGMN"], prefer_brand=spec.prefer_brand, repo=repo)
             rationale = f"Отрезка и проточка канавок шириной {feat.width_mm or 3.0:g} мм (2 кромки)."
 
         elif feat.kind == "THREAD_EXTERNAL":
-            ins = _pick_best_insert(inserts, iso_g, "GROOVING_THREADING", prefer_codes=["16ER"], repo=repo)
+            ins = _pick_best_insert(inserts, iso_g, "GROOVING_THREADING", prefer_codes=["16ER"], prefer_brand=spec.prefer_brand, repo=repo)
             rationale = f"Наружное токарное резьбонарезание {feat.thread_code or '60°'} (универсальный профиль AG60, 3 вершины)."
 
         elif feat.kind == "THREAD_INTERNAL":
@@ -1375,7 +1385,7 @@ def recommend_tooling_for_blueprint(repo: Any, spec: DrawingSpec) -> DrawingTool
                 if tr.warnings:
                     warnings.extend(tr.warnings[:1])
             pref = ["TM-"] if method == "THREAD_MILL" else (["FORM-"] if method == "FORM_TAP" else (["TAP-M12-BL"] if feat.hole_type == "BLIND" else ["TAP-M10-TH"]))
-            ins = _pick_best_insert(inserts, iso_g, "DRILLING", axial_subtype="TAP_THREAD_MILL", prefer_codes=pref, target_diam_mm=feat.diameter_mm, repo=repo)
+            ins = _pick_best_insert(inserts, iso_g, "DRILLING", axial_subtype="TAP_THREAD_MILL", prefer_codes=pref, target_diam_mm=feat.diameter_mm, prefer_brand=spec.prefer_brand, repo=repo)
             rationale = (
                 f"ЦТ резьбофреза для {t_code} (безопасно для {spec.material_subgroup}, без риска поломки метчика)."
                 if method == "THREAD_MILL"
@@ -1437,20 +1447,20 @@ def recommend_tooling_for_blueprint(repo: Any, spec: DrawingSpec) -> DrawingTool
 
         elif feat.kind == "FACE_MILL":
             if iso_g == "N":
-                ins = _pick_best_insert(inserts, iso_g, "MILLING", prefer_codes=["APKT 160408-AL"], repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "MILLING", prefer_codes=["SEHT 1204AFFN", "APKT 160408-AL"], prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = "Полированная фрезерная пластина для чистых плоскостей по алюминию."
             else:
-                ins = _pick_best_insert(inserts, iso_g, "MILLING", prefer_codes=["SEKT"], repo=repo)
+                ins = _pick_best_insert(inserts, iso_g, "MILLING", prefer_codes=["ONMU 0605ANSN", "SEKT"], prefer_brand=spec.prefer_brand, repo=repo)
                 rationale = "Торцевая фреза 45° (SEKT, 4 кромки) — мягкий вход и максимальная производительность."
 
         elif feat.kind == "COPY_3D":
-            ins = _pick_best_insert(inserts, iso_g, "MILLING", prefer_codes=["RDMT", "APKT"], repo=repo)
+            ins = _pick_best_insert(inserts, iso_g, "MILLING", prefer_codes=["RDMT", "APKT"], prefer_brand=spec.prefer_brand, repo=repo)
             rationale = "Круглая копировальная пластина RDMT (6 кромок) для 3D-поверхностей и сложных сплавов."
 
         else:  # SHOULDER_POCKET
             ins = _pick_best_insert(
                 inserts, iso_g, "MILLING",
-                prefer_codes=["APKT 160408-AL"] if iso_g == "N" else ["APKT 160408"],
+                prefer_codes=["SEHT 1204AFFN", "APKT 160408-AL"] if iso_g == "N" else ["APKT 160408"],
                 repo=repo,
             )
             rationale = "Уступное и контурное фрезерование 90° (APKT с зачистной фаской Wiper)."
@@ -1490,6 +1500,8 @@ def recommend_tooling_for_blueprint(repo: Any, spec: DrawingSpec) -> DrawingTool
                 feature_summary=feat_summary,
                 insert_id=ins["id"],
                 iso_code=ins["iso_code"],
+                brand=ins.get("brand") or "ISO Generic",
+                catalog_page=ins.get("catalog_page") or "",
                 shape_code=ins.get("shape_code", "C"),
                 operation_domain=ins["operation_domain"],
                 grade_code=ins["grade_code"],
@@ -1713,6 +1725,7 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
         stability=req.stability,
         include_holders=req.include_holders,
     )
+    spec.prefer_brand = req.prefer_brand
     plan = recommend_tooling_for_blueprint(repo, spec)
     if vision_errors:
         for ve in reversed(vision_errors):
