@@ -777,46 +777,46 @@
 
       if (feat.kind === "EXTERNAL_ROUGH") {
         if (isoG === "H") {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["CNGA"] });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["CNGA 120408-HT"] });
           rationale = `Закалённая сталь (${spec.hardness_hrc || 52} HRC): CBN-пластина для твёрдого точения насухо.`;
         } else if (isoG === "K") {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["SNMG", "WNMG"], preferApp: "ROUGHING" });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["SNMG 120412-GH", "WNMG 080408-CTM"], preferApp: "ROUGHING" });
           rationale = "Чугун: 8-кромочная SNMG с толстым Al2O3 — минимальная цена кромки.";
         } else if (isoG === "N") {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["CCGT", "DCMT"] });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["CCGT 09T304-AL", "DCMT 11T304-AL"] });
           rationale = "Алюминий/цветмет: полированная острая кромка без покрытия.";
         } else if (isoG === "M") {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["WNMG 080412", "CNMG 120404"], preferApp: "ROUGHING" });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["WNMG 080412-MR", "CNMG 120404-CF"], preferApp: "ROUGHING" });
           rationale = "Нержавейка: вязкий сплав и усиленная кромка против наклёпа.";
         } else if (spec.stability === "INTERRUPTED") {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["WNMG 080412", "CNMG 120408"], preferApp: "ROUGHING" });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["WNMG 080412-MR", "CNMG 120412-GH"], preferApp: "ROUGHING" });
           rationale = "Прерывистое/ударное резание: усиленный радиус R1.2 и 6 кромок.";
         } else {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["WNMG 080408-CTM", "CNMG 120408-CM", "WNMG 080408", "CNMG 120408"], preferApp: "MEDIUM" });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["WNMG 080408-CTM", "CNMG 120408-CM"], preferApp: "MEDIUM" });
           rationale = `Оптимальный съём и экономика (6 кр.) для ${spec.material_subgroup}.`;
         }
       } else if (feat.kind === "EXTERNAL_FINISH") {
         if (isoG === "H") {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["CNGA"] });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["CNGA 120408-HT"] });
           rationale = "Финишное твёрдое точение CBN (Ra ≤ 0.8 мкм).";
         } else if (isoG === "N") {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["CCGT", "DCMT"], preferApp: "FINISHING" });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["CCGT 09T304-AL", "DCMT 11T304-AL"], preferApp: "FINISHING" });
           rationale = "Зеркально полированная пластина RE 0.4 для чистой поверхности.";
         } else if (isoG === "M" || isoG === "S") {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["VNMG", "CNMG 120404"], preferApp: "FINISHING" });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["VNMG 160404-AU", "CNMG 120404-CF"], preferApp: "FINISHING" });
           rationale = "Острый PVD-сплав с RE 0.4 для чистового прохода без наклёпа.";
         } else {
-          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["DNMG 150604-CF", "CNMG 120404", "DNMG", "TNMG"], preferApp: "FINISHING" });
+          ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: ["DNMG 150604-CF", "CNMG 120404-CF"], preferApp: "FINISHING" });
           rationale = `Чистовая пластина под Ra ${feat.ra_um || spec.ra_min_um || 1.6} мкм.`;
         }
       } else if (feat.kind === "INTERNAL_BORE") {
-        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: isoG === "N" ? ["CCGT", "DCMT"] : ["CCMT", "DCMT"], preferHolderCat: "BORING_BAR" });
+        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "TURNING", preferCodes: isoG === "N" ? ["CCGT 09T304-AL", "DCMT 11T304-AL"] : ["CCMT 09T304-XM1"], preferHolderCat: "BORING_BAR" });
         rationale = `Позитивная 7° пластина для внутреннего растачивания Ø${feat.diameter_mm || 30}.`;
       } else if (feat.kind === "GROOVE_PARTING") {
-        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "GROOVING_THREADING", preferCodes: ["MGMN 300-M", "CD200-300M", "MGMN"] });
+        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "GROOVING_THREADING", preferCodes: ["MGMN 300-M", "CD200-300M"] });
         rationale = `Отрезка и канавки шириной ${feat.width_mm || 3} мм (2 кромки).`;
       } else if (feat.kind === "THREAD_EXTERNAL") {
-        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "GROOVING_THREADING", preferCodes: ["16ER"] });
+        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "GROOVING_THREADING", preferCodes: ["16ER AG60-HT"] });
         rationale = `Наружная токарная резьба ${feat.thread_code || "60°"} (универсальная AG60, 3 вершины).`;
       } else if (feat.kind === "THREAD_INTERNAL") {
         const tCode = (feat.thread_code || "M12").toUpperCase();
@@ -829,7 +829,7 @@
           const minDep = +((feat.length_or_depth_mm || 20) + tSpec.pitch_mm * (feat.hole_type === "BLIND" && method !== "THREAD_MILL" ? 3.5 : 1.5)).toFixed(1);
           preDrillNote = `Предварит. сверло под ${tCode}: Ø${preD.toFixed(2)} мм (глуб. ≥ ${minDep} мм)`;
         }
-        const pref = method === "THREAD_MILL" ? ["TM-"] : (method === "FORM_TAP" ? ["FORM-"] : (feat.hole_type === "BLIND" ? ["TAP-M12-BL"] : ["TAP-M10-TH"]));
+        const pref = method === "THREAD_MILL" ? ["TM-M16-HT"] : (method === "FORM_TAP" ? ["FORM-M8-HT"] : ["TAP-M12-BL-HT"]);
         ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "DRILLING", axialSubtype: "TAP_THREAD_MILL", preferCodes: pref, targetDiam: feat.diameter_mm });
         rationale = method === "THREAD_MILL"
           ? `ЦТ резьбофреза для ${tCode} (без риска поломки метчика в ${spec.material_subgroup}).`
@@ -841,7 +841,7 @@
         const allowD = useBore ? (dH <= 30 ? 0.40 : 0.60) : (dH <= 6 ? 0.12 : (dH <= 16 ? 0.20 : (dH <= 32 ? 0.25 : 0.35)));
         const preOpt = +(dH - allowD).toFixed(2);
         preDrillNote = `Предварит. отверстие под ${tol}: Ø${preOpt.toFixed(2)} мм (припуск ${(allowD / 2).toFixed(3)} мм/стор.)`;
-        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "DRILLING", axialSubtype: "REAMER_FINE_BORE", preferCodes: useBore ? ["FBORE"] : ["REAM-H7"], targetDiam: dH });
+        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "DRILLING", axialSubtype: "REAMER_FINE_BORE", preferCodes: useBore ? ["FBORE-MIC-25-HT"] : ["REAM-H7-200-HT", "REAM-H7-100-HT"], targetDiam: dH });
         rationale = useBore
           ? `Микрометрическая расточка Ø${dH} ${tol} (0.002 мм/дел, цикл G76).`
           : `6-зубая ЦТ развёртка Ø${dH} ${tol} (цикл G85, Ra 0.8 мкм).`;
@@ -863,13 +863,13 @@
         ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "DRILLING", axialSubtype: sub, targetDiam: dH, targetLd: ld });
         if (ld > 5) preDrillNote = `Глубокое сверление ${ld}xD: нужен пилот 2xD и СОЖ ≥ 35 бар`;
       } else if (feat.kind === "FACE_MILL") {
-        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "MILLING", preferCodes: isoG === "N" ? ["SEHT 1204AFFN", "APKT 160408-AL"] : ["ONMU 0605ANSN", "SEKT"] });
+        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "MILLING", preferCodes: isoG === "N" ? ["SEHT 1204AFFN", "APMT 1604PDER-AL"] : ["ONMU 0605ANSN", "SEKT 1204AFEN-11"] });
         rationale = isoG === "N" ? "Полированная фрезерная пластина для плоскостей по цветмету." : "Торцевая фреза 45° SEKT (4 кр.) — мягкий вход и высокая подача.";
       } else if (feat.kind === "COPY_3D") {
-        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "MILLING", preferCodes: ["RDMT", "APKT"] });
+        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "MILLING", preferCodes: ["RDMT 1204MO-ST14", "P3204-D16"] });
         rationale = "Круглая пластина RDMT (6 кр.) для 3D-поверхностей и сложных сплавов.";
       } else {
-        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "MILLING", preferCodes: isoG === "N" ? ["SEHT 1204AFFN", "APKT 160408-AL"] : ["APMT 1604PDER-M2", "LNHX 11T408AFN", "APKT 160408"] });
+        ins = pickBestInsertClient({ isoGroup: isoG, preferBrand: spec.prefer_brand || "HARDTOOL", domain: "MILLING", preferCodes: isoG === "N" ? ["SEHT 1204AFFN", "APMT 1604PDER-AL"] : ["APMT 1604PDER-M2", "WNMU 060610-SN", "LNHX 11T408AFN"] });
         rationale = "Уступное и контурное фрезерование 90° (APKT с зачистной фаской Wiper).";
       }
 
@@ -1363,7 +1363,7 @@
             const b = document.getElementById("connBadge");
             const t = document.getElementById("connText");
             if (b) { b.classList.remove("demo"); b.classList.add("live"); }
-            if (t) t.textContent = "FastAPI Live v2.4.0";
+            if (t) t.textContent = "FastAPI Live v2.5.0";
           }
         } else {
           apiFailReason = `Сервер /api/drawing/analyze вернул HTTP ${resp.status}`;

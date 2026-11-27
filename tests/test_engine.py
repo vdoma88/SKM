@@ -98,14 +98,14 @@ def test_repository_memory_seed_and_cross_references():
     assert repo.mode == "memory_seed"
     meta = repo.get_meta()
     assert len(meta["material_subgroups"]) == 12
-    assert len(repo.list_inserts()) == 55
-    assert len(repo.list_inserts("TURNING")) == 18
-    assert len(repo.list_inserts("MILLING")) == 12
-    assert len(repo.list_inserts("DRILLING")) == 20
+    assert len(repo.list_inserts()) == 63
+    assert len(repo.list_inserts("TURNING")) == 16
+    assert len(repo.list_inserts("MILLING")) == 25
+    assert len(repo.list_inserts("DRILLING")) == 16
 
-    xrefs = repo.get_cross_references("ins-1")
+    xrefs = repo.get_cross_references("ht-t01")
     assert len(xrefs) >= 2
-    assert any(x["target_iso_code"] == "WNMG 080408" for x in xrefs)
+    assert any(x["target_iso_code"].startswith("WNMG 080408") for x in xrefs)
 
 
 def test_repository_postgres_mock_driver():
@@ -366,8 +366,8 @@ def test_taylor_economics_and_warehouse_csv():
     # Warehouse CSV parsing (sample + Russian headers)
     sample_csv = generate_sample_stock_csv()
     parsed = parse_stock_csv(sample_csv)
-    assert len(parsed) == 46
-    assert any(i.normalized_code == "CNMG120408" and i.qty == 40 for i in parsed)
+    assert len(parsed) == 63
+    assert any(i.normalized_code == "CNMG120408CM" and i.qty == 40 for i in parsed)
 
     ru_csv = "Пластина;Сплав;Остаток;Цена;Ячейка\nWNMG 080408;GEN-P25-CVD;15;720,5;B-02\n"
     parsed_ru = parse_stock_csv(ru_csv)
@@ -376,7 +376,7 @@ def test_taylor_economics_and_warehouse_csv():
     assert parsed_ru[0].unit_price_rub == 720.5
 
     repo = ToolingRepository(db_url="")
-    assert len(repo.list_inserts("GROOVING_THREADING")) == 5
+    assert len(repo.list_inserts("GROOVING_THREADING")) == 6
     saved_asm = repo.create_assembly({"name": "Test Setup", "iso_code": "CNMG 120408"})
     assert len(repo.list_assemblies()) == 1
     assert repo.delete_assembly(saved_asm["id"]) is True
@@ -587,7 +587,7 @@ def test_cnc_gcode_generator_fanuc_and_siemens():
 def test_sales_catalog_search_filters_pricing_and_upsell():
     repo = ToolingRepository(db_url="")
     all_items = build_sales_catalog(repo)
-    assert len(all_items) == 55
+    assert len(all_items) == 63
 
     # Russian alloy/material synonym search ("нержавейка" -> M group, "д16т" -> N group)
     ss_items = build_sales_catalog(repo, q="нержавейка", only_in_stock=True)
@@ -596,7 +596,7 @@ def test_sales_catalog_search_filters_pricing_and_upsell():
 
     al_items = build_sales_catalog(repo, q="Д16Т")
     assert len(al_items) >= 3
-    assert any("AL" in i.iso_code or i.iso_code == "DCMT 11T304" for i in al_items)
+    assert any("AL" in i.iso_code for i in al_items)
 
     # Price-per-edge sorting for Steel turning puts multi-edge economical inserts on top
     p_turn = build_sales_catalog(repo, iso_group="P", operation="TURNING", sort_by="edge_price_asc")
@@ -617,25 +617,25 @@ def test_commercial_quote_vat_discount_and_orders_crud():
             customer_name="ООО ПромСнаб",
             customer_inn="0274123456",
             discount_pct=10.0,
-            include_vat_20=True,
+            include_vat_22=True,
             comment="Отгрузка ТК Деловые Линии",
             lines=[
-                QuoteLineInput(code="WNMG 080408", description="Сталь, 6 кр.", qty=20, unit_price_rub=690.0, stock_qty=60, pack_qty=10),
+                QuoteLineInput(code="WNMG 080408-CTM", description="Сталь, 6 кр.", qty=20, unit_price_rub=680.0, stock_qty=40, pack_qty=10),
                 QuoteLineInput(item_type="HOLDER", code="PWLNR 2525M 08", description="Державка", qty=1, unit_price_rub=4800.0, stock_qty=5, pack_qty=1),
-                QuoteLineInput(code="CNGA 120408", description="CBN", qty=10, unit_price_rub=3120.0, stock_qty=0, pack_qty=10),
+                QuoteLineInput(code="CNGA 120408-HT", description="Закал.", qty=10, unit_price_rub=2490.0, stock_qty=0, pack_qty=10),
             ],
         )
     )
     assert q.total_positions == 3
     assert q.total_units == 31
-    assert q.subtotal_rub == 49800.0
-    assert q.discount_rub == 4980.0
-    assert q.total_rub == 44820.0
-    assert q.vat_rub == 7470.0
+    assert q.subtotal_rub == 43300.0
+    assert q.discount_rub == 4330.0
+    assert q.total_rub == 38970.0
+    assert q.vat_rub == 7027.38
     assert q.in_stock_lines_count == 2
     assert q.backorder_lines_count == 1
     assert "ООО ПромСнаб" in q.messenger_text
-    assert "НДС 20%" in q.messenger_text
+    assert "НДС 22%" in q.messenger_text
 
     repo = ToolingRepository(db_url="")
     saved = repo.create_order({"quoteNumber": q.quote_number, "total": q.total_rub})
@@ -674,8 +674,8 @@ def test_drawing_dxf_and_eskd_annotation_parser():
     assert resp.plan.spec.iso_group == "M"
     assert resp.plan.spec.material_subgroup == "M1"
     codes = [ln.iso_code for ln in resp.plan.kit_lines]
-    assert "REAM-H7-200" in codes
-    assert "TAP-M12-BL" in codes
+    assert "REAM-H7-200-HT" in codes
+    assert "TAP-M12-BL-HT" in codes
     assert any(c.startswith("SC-DRL-") for c in codes)
     # Ensure pre-drill guidance is generated for both H7 and M12
     assert any(ln.pre_drill_note and "10.20" in ln.pre_drill_note for ln in resp.plan.kit_lines)
@@ -693,9 +693,9 @@ def test_drawing_demo_blueprints_shared_tools_and_hardened_cbn():
     assert res_h.plan.spec.iso_group == "H"
     assert res_h.plan.spec.hardness_hrc == 54.0
     h_codes = [ln.iso_code for ln in res_h.plan.kit_lines]
-    assert "CNGA 120408" in h_codes
-    assert "FBORE-MIC-25" in h_codes
-    assert "TM-M16" in h_codes
+    assert "CNGA 120408-HT" in h_codes
+    assert "FBORE-MIC-25-HT" in h_codes
+    assert "TM-M16-HT" in h_codes
     assert all(ln.operation_domain != "MILLING" for ln in res_h.plan.kit_lines)
 
     # Aluminum housing -> shared APKT 160408-AL isn't double-billed across Face Mill & Shoulder Pocket
@@ -709,8 +709,8 @@ def test_drawing_demo_blueprints_shared_tools_and_hardened_cbn():
     assert len(al_mill_lines) == 2
     assert al_mill_lines[0].line_total_rub > 0 and al_mill_lines[1].line_total_rub == 0.0
     assert al_mill_lines[1].shared_with_step == al_mill_lines[0].step_no
-    assert any(ln.iso_code == "FORM-M8" for ln in res_n.plan.kit_lines)
-    assert any(ln.iso_code == "SC-DRL-100-AL" for ln in res_n.plan.kit_lines)
+    assert any(ln.iso_code == "FORM-M8-HT" for ln in res_n.plan.kit_lines)
+    assert any(ln.iso_code == "SC-DRL-100-AL-HT" for ln in res_n.plan.kit_lines)
 
 
 def test_cad3d_step_brep_feature_recognition_and_tooling_kit():
@@ -742,7 +742,7 @@ def test_cad3d_step_brep_feature_recognition_and_tooling_kit():
     assert resp.cad3d_summary["bbox_x_mm"] == 120.0 and resp.cad3d_summary["bbox_z_mm"] == 30.0
     assert resp.plan.spec.iso_group == "M"
     codes = [ln.iso_code for ln in resp.plan.kit_lines]
-    assert "FBORE-MIC-25" in codes  # Ø28 H7 upgraded in-place to fine boring
+    assert "FBORE-MIC-25-HT" in codes  # Ø28 H7 upgraded in-place to fine boring
     assert any(c.startswith("SC-DRL-") for c in codes)  # 6x Ø12 holes
     assert any(c.startswith("TAP-") for c in codes)  # 4x M10 thread
 
@@ -764,7 +764,7 @@ def test_cad3d_stl_mesh_analyzer_and_housing_step():
     assert resp_h.cad3d_summary["bbox_y_mm"] == 100.0
     assert resp_h.cad3d_summary["bbox_z_mm"] == 45.0
     assert resp_h.plan.spec.iso_group == "N"
-    assert any(ln.iso_code in ("SEHT 1204AFFN", "APKT 160408-AL") for ln in resp_h.plan.kit_lines)
+    assert any(ln.iso_code in ("SEHT 1204AFFN", "APMT 1604PDER-AL") for ln in resp_h.plan.kit_lines)
 
     # STL workpiece analyzer (using generated ASCII STL)
     stl_bytes = export_iso1832_stl("SC-DRL-120-8D").encode("utf-8")
@@ -841,6 +841,11 @@ def test_hardtool_2025_catalog_parser_3d_sales_and_blueprint():
         ("CD200-300M", 2),
         ("CBGR-060", 1),
         ("SPMT 090408-HT", 4),
+        ("JXHT 1905ZZTN-RA", 12),
+        ("P3204-D16", 2),
+        ("HAA-100X3X22-Z24", 24),
+        ("CMTPR 100FN", 1),
+        ("TOHT 090305-GP", 2),
     ):
         p = parse_iso1832(code)
         assert p.valid is True, f"HARDTOOL parse failed for {code}: {p.error}"
@@ -850,7 +855,9 @@ def test_hardtool_2025_catalog_parser_3d_sales_and_blueprint():
 
     # 2. Sales catalog brand filter & HARDTOOL alloy search
     ht_items = build_sales_catalog(repo, brand="HARDTOOL")
-    assert len(ht_items) == 19
+    all_items = build_sales_catalog(repo)
+    assert len(ht_items) == 63
+    assert len(all_items) == 63
     assert all(i.brand == "HARDTOOL" and i.in_stock for i in ht_items)
     pms_items = build_sales_catalog(repo, q="H9760PMS")
     assert len(pms_items) >= 6
@@ -862,6 +869,7 @@ def test_hardtool_2025_catalog_parser_3d_sales_and_blueprint():
     assert "WNMG 080408-CTM" in codes
     assert "DNMG 150604-CF" in codes
     assert "CCMT 09T304-XM1" in codes
+    assert all(ln.brand == "HARDTOOL" for ln in resp.plan.kit_lines)
     assert "MGMN 300-M" in codes
 
 

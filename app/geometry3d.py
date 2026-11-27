@@ -94,8 +94,8 @@ def _raw_polygon_vertices(parsed: ISO1832Parsed) -> List[Tuple[float, float]]:
         h_half = max(length, ic * 1.1) / 2.0
         return [(w_half, h_half), (-w_half, h_half), (-w_half, -h_half), (w_half, -h_half)]
 
-    if shape in ("P", "H", "O", "X"):
-        n_sides = {"P": 5, "H": 6, "O": 8, "X": 7}[shape]
+    if shape in ("P", "H", "O", "X", "J"):
+        n_sides = {"P": 5, "H": 6, "O": 8, "X": 7, "J": 12}[shape]
         rv = r / math.cos(math.pi / n_sides)
         return [
             (rv * math.cos(2.0 * math.pi * k / n_sides), rv * math.sin(2.0 * math.pi * k / n_sides))

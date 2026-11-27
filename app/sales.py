@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 HOLDER_UPSELL_PRICE_RUB: Dict[str, float] = {
@@ -65,7 +65,7 @@ SEARCH_SYNONYMS: Dict[str, List[str]] = {
 class SalesCatalogItem(BaseModel):
     insert_id: str
     iso_code: str
-    brand: str = "ISO Generic"
+    brand: str = "HARDTOOL"
     catalog_page: str = ""
     analog_note: str = ""
     shape_code: str
@@ -115,8 +115,15 @@ class OrderQuoteRequest(BaseModel):
     contact_info: str = ""
     comment: str = ""
     discount_pct: float = Field(0.0, ge=0.0, le=50.0)
-    include_vat_20: bool = True
+    include_vat_22: bool = True
+    include_vat_20: Optional[bool] = None
     lines: List[QuoteLineInput] = []
+
+    @model_validator(mode="after")
+    def _sync_vat_alias(self) -> "OrderQuoteRequest":
+        if self.include_vat_20 is not None:
+            self.include_vat_22 = bool(self.include_vat_20)
+        return self
 
 
 class QuoteLineComputed(BaseModel):
@@ -147,14 +154,15 @@ class OrderQuoteResponse(BaseModel):
     discount_rub: float
     total_rub: float
     vat_rub: float
-    include_vat_20: bool
+    net_without_vat_rub: float
+    include_vat_22: bool
     in_stock_lines_count: int
     backorder_lines_count: int
     messenger_text: str
 
 
 def _determine_pack_qty(ins: Dict[str, Any]) -> int:
-    if str(ins.get("iso_code", "")).upper().startswith("CB"):
+    if str(ins.get("iso_code", "")).upper().startswith(("CB", "HAA-")):
         return 1
     sub = ins.get("axial_subtype")
     if sub in ("SOLID_CARBIDE", "TAP_THREAD_MILL", "REAMER_FINE_BORE"):
@@ -409,10 +417,11 @@ def build_commercial_quote(req: OrderQuoteRequest) -> OrderQuoteResponse:
     subtotal = round(subtotal, 2)
     total_rub = round(sum(c.line_total_rub for c in computed), 2)
     discount_rub = round(max(0.0, subtotal - total_rub), 2)
-    vat_rub = round(total_rub * 20.0 / 120.0, 2) if req.include_vat_20 else 0.0
+    vat_rub = round(total_rub * 22.0 / 122.0, 2) if req.include_vat_22 else 0.0
+    net_without_vat_rub = round(total_rub - vat_rub, 2)
 
     # Format clean messenger quote (Telegram / WhatsApp)
-    msg_lines = [f"📋 Коммерческое предложение {q_num}"]
+    msg_lines = [f"📋 Коммерческое предложение {q_num} · HARDTOOL (ООО «ТехноИнструмент»)"]
     if req.customer_name:
         msg_lines.append(f"Клиент: {req.customer_name}" + (f" (ИНН {req.customer_inn})" if req.customer_inn else ""))
     msg_lines.append("")
@@ -423,7 +432,7 @@ def build_commercial_quote(req: OrderQuoteRequest) -> OrderQuoteResponse:
     msg_lines.append("")
     if req.discount_pct > 0:
         msg_lines.append(f"Скидка {req.discount_pct:g}%: −{discount_rub:,.0f} ₽")
-    vat_lbl = f"в т.ч. НДС 20%: {vat_rub:,.0f} ₽" if req.include_vat_20 else "без НДС"
+    vat_lbl = f"в т.ч. НДС 22%: {vat_rub:,.0f} ₽" if req.include_vat_22 else "без НДС"
     msg_lines.append(f"💰 ИТОГО: {total_rub:,.0f} ₽ ({vat_lbl})")
     if req.comment:
         msg_lines.append(f"Комментарий: {req.comment}")
@@ -445,7 +454,8 @@ def build_commercial_quote(req: OrderQuoteRequest) -> OrderQuoteResponse:
         discount_rub=discount_rub,
         total_rub=total_rub,
         vat_rub=vat_rub,
-        include_vat_20=req.include_vat_20,
+        net_without_vat_rub=net_without_vat_rub,
+        include_vat_22=req.include_vat_22,
         in_stock_lines_count=in_stock_cnt,
         backorder_lines_count=backorder_cnt,
         messenger_text=messenger_text,

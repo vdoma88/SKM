@@ -42,7 +42,7 @@ from app.sales import (
 
 app = FastAPI(
     title="SKM · ISO Tooling Selector API",
-    version="2.4.0",
+    version="2.5.0",
     description=(
         "Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics, "
         "Taylor tool-life economics, shop-floor warehouse stock, 3D STL/STEP geometry, "
@@ -98,7 +98,7 @@ class CrossRefItem(BaseModel):
 class CandidateResult(BaseModel):
     insert_id: str
     iso_code: str
-    brand: str = "ISO Generic"
+    brand: str = "HARDTOOL"
     catalog_page: str = ""
     grade_code: str
     coating_method: str
@@ -208,7 +208,7 @@ def health():
     raw_key = resolve_vision_api_key()
     return {
         "status": "ok",
-        "version": "2.4.0",
+        "version": "2.5.0",
         "storage_mode": repo.mode,
         "vision_configured": bool(raw_key),
         "vision_provider": detect_vision_provider(raw_key),

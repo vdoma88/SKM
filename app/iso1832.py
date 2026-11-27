@@ -25,6 +25,7 @@ SHAPES: Dict[str, Dict[str, Any]] = {
     "L": {"name": "Прямоугольник 90°", "angle_deg": 90, "edges_single": 2, "ic_factor": 0.600},
     "E": {"name": "Параллелограмм 75° (High-Feed)", "angle_deg": 75, "edges_single": 2, "ic_factor": 0.650},
     "X": {"name": "Семиугольник / Спец. (14 кр.)", "angle_deg": 128, "edges_single": 7, "ic_factor": 1.850},
+    "J": {"name": "12-гранная позитивная (12 кр.)", "angle_deg": 150, "edges_single": 12, "ic_factor": 1.000},
     "DRL": {"name": "Осевое сверло (2-зубое)", "angle_deg": 140, "edges_single": 2, "ic_factor": 1.000},
     "TAP": {"name": "Метчик / Резьбофреза", "angle_deg": 60, "edges_single": 4, "ic_factor": 1.000},
     "RM":  {"name": "Развёртка H7 / Чист. расточка", "angle_deg": 90, "edges_single": 6, "ic_factor": 1.000},
@@ -41,6 +42,7 @@ CLEARANCE_ANGLES: Dict[str, Dict[str, Any]] = {
     "F": {"deg": 25, "desc": "Позитивная 25°"},
     "G": {"deg": 30, "desc": "Позитивная 30°"},
     "O": {"deg": 11, "desc": "Специальный позитивный угол (сверлильный/фрезерный)"},
+    "X": {"deg": 11, "desc": "Специальный позитивный угол 11° (JXHT)"},
 }
 
 TOLERANCES: Dict[str, str] = {
@@ -61,6 +63,7 @@ FIXING_TYPES: Dict[str, Dict[str, Any]] = {
     "N": {"desc": "Без отверстия, без стружколома (прихват сверху)", "double_sided": True},
     "X": {"desc": "Специальное исполнение (сверлильная/фрезерная геометрия)", "double_sided": True},
     "U": {"desc": "Цилиндрическое отв., двусторонняя фрезерная (винт)", "double_sided": True},
+    "J": {"desc": "Двусторонняя квадратная под 88° (винт)", "double_sided": True},
 }
 
 # Standard IC lookup table by (shape, edge_code) in mm
@@ -85,7 +88,7 @@ THICKNESS_MM: Dict[str, float] = {
 RADIUS_MM: Dict[str, float] = {
     "00": 0.0, "02": 0.2, "04": 0.4, "08": 0.8, "12": 1.2,
     "16": 1.6, "20": 2.0, "24": 2.4, "32": 3.2,
-    "M0": 0.0, "MO": 0.0, "PD": 0.8, "AF": 0.8, "AN": 0.8, "ER": 1.5, "ZE": 1.2, "10": 1.0,
+    "M0": 0.0, "MO": 0.0, "PD": 0.8, "AF": 0.8, "AN": 0.8, "ER": 1.5, "ZE": 1.2, "10": 1.0, "GN": 0.8, "ZZ": 0.8,
 }
 
 
@@ -127,6 +130,77 @@ class ISO1832Parsed(BaseModel):
 def _parse_special_grooving_threading(raw: str, core: str, suffix: Optional[str]) -> Optional[ISO1832Parsed]:
     core_nodash = re.sub(r"[^A-Za-z0-9]", "", raw).upper()
     """Parses standard industry Grooving (MGMN 200/300/400) and Threading (16ER/16IR AG60) codes."""
+    # HARDTOOL Ball-Nose Copy Insert: P3204-D10 .. P3204-D32
+    m_p32 = re.match(r"^P3204D(\d{2})$", core_nodash)
+    if m_p32:
+        d_mm = float(int(m_p32.group(1)))
+        pocket = f"R-P-{_round_half_up_x100(d_mm)}-476-T"
+        return ISO1832Parsed(
+            raw_code=raw, normalized_code=core_nodash, valid=True,
+            shape_code="R", shape_name=f"Круглая профильная HARDTOOL P3204 (Ø{d_mm:g} мм)",
+            clearance_angle_code="P", clearance_angle_deg=11.0, tolerance_class="G", fixing_type_code="T",
+            ic_mm=d_mm, cutting_edge_length_mm=d_mm, thickness_mm=4.76, corner_radius_mm=round(d_mm / 2.0, 2),
+            is_double_sided=False, cutting_edges_count=2, suffix=f"D{int(d_mm)}", seat_pocket_signature=pocket,
+            segments=[
+                ISO1832Segment(position=1, label="Серия", code="P3204", meaning="HARDTOOL профильная (замена Walter)", color="#D96B27"),
+                ISO1832Segment(position=2, label="Диаметр (DC)", code=f"D{int(d_mm)}", meaning=f"Ø{d_mm:g} мм (R={d_mm/2:g} мм)", color="#FB7185"),
+                ISO1832Segment(position=3, label="Кромок", code="2", meaning="2 профильные кромки", color="#2DD4BF"),
+            ],
+        )
+
+    # HARDTOOL Solid Carbide Slotting Disc Cutter (DIN 1837/1838): HAA-100X3X22-Z24
+    m_haa = re.match(r"^(HA[A-F])(\d{2,3})X(\d+(?:\.\d+)?)X(\d+)(?:Z(\d+))?$", core_nodash)
+    if m_haa:
+        ser, d_s, h_s, id_s, z_s = m_haa.groups()
+        d_mm, h_mm, z_cnt = float(d_s), float(h_s), int(z_s or 20)
+        pocket = f"R-N-{_round_half_up_x100(d_mm)}-{_round_half_up_x100(h_mm)}-I"
+        return ISO1832Parsed(
+            raw_code=raw, normalized_code=core_nodash, valid=True,
+            shape_code="R", shape_name=f"Дисковая ЦТ-фреза HARDTOOL {ser} Ø{d_mm:g}×{h_mm:g} мм",
+            clearance_angle_code="N", clearance_angle_deg=0.0, tolerance_class="H", fixing_type_code="N",
+            ic_mm=d_mm, cutting_edge_length_mm=h_mm, thickness_mm=h_mm, corner_radius_mm=0.2,
+            is_double_sided=False, cutting_edges_count=z_cnt, suffix=f"Z{z_cnt}", seat_pocket_signature=pocket,
+            segments=[
+                ISO1832Segment(position=1, label="Серия", code=ser, meaning="Дисковая ЦТ-фреза HARDTOOL (DIN 1837/1838)", color="#D96B27"),
+                ISO1832Segment(position=2, label="Размер", code=f"{int(d_mm)}x{h_mm:g}", meaning=f"Ø{d_mm:g} мм, шир. {h_mm:g} мм, отв. Ø{id_s}", color="#FB7185"),
+                ISO1832Segment(position=3, label="Зубьев", code=f"Z{z_cnt}", meaning=f"{z_cnt} режущих зубьев", color="#2DD4BF"),
+            ],
+        )
+
+    # HARDTOOL Precision Grooving CMTPR 100FN & Gun Drill TOHT 090305-GP
+    m_cmt = re.match(r"^CMT[LR]?P[RL](\d{3})([A-Z]{2})?$", core_nodash)
+    if m_cmt:
+        w_mm = round(int(m_cmt.group(1)) / 100.0, 2)
+        pocket = f"L-N-{_round_half_up_x100(w_mm)}-318-N"
+        return ISO1832Parsed(
+            raw_code=raw, normalized_code=core_nodash, valid=True,
+            shape_code="L", shape_name=f"Шлифованная канавочная HARDTOOL CMTPR (w={w_mm:g} мм)",
+            clearance_angle_code="N", clearance_angle_deg=0.0, tolerance_class="G", fixing_type_code="N",
+            ic_mm=w_mm, cutting_edge_length_mm=16.0, thickness_mm=3.18, corner_radius_mm=0.1,
+            is_double_sided=False, cutting_edges_count=1, suffix=m_cmt.group(2) or "FN", seat_pocket_signature=pocket,
+            segments=[
+                ISO1832Segment(position=1, label="Серия", code="CMTPR", meaning="Шлифованная отрезная/канавочная HARDTOOL", color="#D96B27"),
+                ISO1832Segment(position=2, label="Ширина", code=m_cmt.group(1), meaning=f"{w_mm:g} мм", color="#FB7185"),
+            ],
+        )
+
+    m_toht = re.match(r"^TOHT(\d{2})(\d{2})(\d{2})(GP)?$", core_nodash)
+    if m_toht:
+        w_mm = float(int(m_toht.group(1)))
+        thk_mm = round(int(m_toht.group(2)) / 10.0, 2)
+        pocket = f"L-P-{_round_half_up_x100(w_mm)}-{_round_half_up_x100(thk_mm)}-T"
+        return ISO1832Parsed(
+            raw_code=raw, normalized_code=core_nodash, valid=True,
+            shape_code="L", shape_name=f"Пластина пушечного сверла HARDTOOL TOHT ({w_mm:g} мм)",
+            clearance_angle_code="P", clearance_angle_deg=11.0, tolerance_class="G", fixing_type_code="T",
+            ic_mm=w_mm, cutting_edge_length_mm=w_mm, thickness_mm=thk_mm, corner_radius_mm=0.5,
+            is_double_sided=False, cutting_edges_count=2, suffix="GP", seat_pocket_signature=pocket,
+            segments=[
+                ISO1832Segment(position=1, label="Серия", code="TOHT", meaning="Пластина пушечного сверла + направляющая GP", color="#D96B27"),
+                ISO1832Segment(position=2, label="Размер", code=m_toht.group(1), meaning=f"Ширина {w_mm:g} мм, S={thk_mm} мм", color="#FB7185"),
+            ],
+        )
+
     # HARDTOOL CD grooving inserts: e.g. CD200-300M, CD200-200S
     m_cd = re.match(r"^CD2\d{2}(\d{3})([MS])?$", core_nodash)
     if m_cd:
@@ -270,7 +344,7 @@ def _parse_special_grooving_threading(raw: str, core: str, suffix: Optional[str]
         )
 
     # Modular Exchangeable-Tip Drill Crown: e.g. MOD-DRL-140, MOD-DRL-200
-    m_mod = re.match(r"^MODDRL(\d{3})$", core_nodash)
+    m_mod = re.match(r"^MODDRL(\d{3})(?:HT)?$", core_nodash)
     if m_mod:
         dc_mm = round(int(m_mod.group(1)) / 10.0, 2)
         thk_mm = round(dc_mm * 0.48, 2)
@@ -304,7 +378,7 @@ def _parse_special_grooving_threading(raw: str, core: str, suffix: Optional[str]
         )
 
     # Solid Carbide Internal-Coolant Drill: e.g. SC-DRL-080-5D, SC-DRL-120-8D, SC-DRL-100-AL, SC-DRL-060-H
-    m_sc = re.match(r"^SCDRL(\d{3})(3D|5D|8D|AL|H)?$", core_nodash)
+    m_sc = re.match(r"^SCDRL(\d{3})(3D|5D|8D|AL|H)?(?:HT)?$", core_nodash)
     if m_sc:
         dc_mm = round(int(m_sc.group(1)) / 10.0, 2)
         tag = m_sc.group(2) or "5D"
@@ -342,7 +416,7 @@ def _parse_special_grooving_threading(raw: str, core: str, suffix: Optional[str]
 
 
     # Cutting Tap / Forming Tap / Thread Mill: TAP-M10, TAP-M12-BL, FORM-M8, TM-M16, TM-G12
-    m_tap = re.match(r"^(TAP|FORM|TM)([MG])(\d{1,2})(BL|TH|P\d+)?$", core_nodash)
+    m_tap = re.match(r"^(TAP|FORM|TM)([MG])(\d{1,2})(BL|TH|P\d+)?(?:HT)?$", core_nodash)
     if m_tap:
         kind, fam, sz_str, opt = m_tap.groups()
         sz_num = int(sz_str)
@@ -378,7 +452,7 @@ def _parse_special_grooving_threading(raw: str, core: str, suffix: Optional[str]
         )
 
     # Carbide Reamer H7 & Micrometric Fine Boring Head: REAM-H7-100, REAM-H7-200, FBORE-MIC-25, FBORE-MIC-50
-    m_rm = re.match(r"^(REAMH7|FBOREMIC)(\d{2,3})$", core_nodash)
+    m_rm = re.match(r"^(REAMH7|FBOREMIC)(\d{2,3})(?:HT)?$", core_nodash)
     if m_rm:
         kind, d_str = m_rm.groups()
         is_ream = kind == "REAMH7"

@@ -18,8 +18,8 @@ class AssemblyExportItem(BaseModel):
     name: str
     operation: str = "TURNING"
     iso_code: str
-    grade_code: str = "GEN-P25-CVD"
-    chipbreaker_code: str = "GEN-PM"
+    grade_code: str = "H9760PMS"
+    chipbreaker_code: str = "HT-CM"
     holder_code: str = "GENERIC-HOLDER"
     seat_pocket_signature: str = ""
     diameter_mm: float = Field(50.0, gt=0)
@@ -81,7 +81,7 @@ def build_gtc_iso13399_package(items: List[AssemblyExportItem]) -> Dict[str, Any
         "gtc_package_information": {
             "gtc_version": "2.0",
             "standard": "ISO 13399",
-            "generator": "SKM ISO Tooling Selector v1.0",
+            "generator": "SKM HARDTOOL 2025 Selector v2.5.0",
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "unit_system": "METRIC",
             "item_count": len(products),
@@ -108,7 +108,7 @@ def build_fusion360_library(items: List[AssemblyExportItem]) -> Dict[str, Any]:
             {
                 "guid": f"skm-tool-{idx:04d}",
                 "description": f"{item.holder_code} / {item.iso_code} ({item.grade_code})",
-                "vendor": "ISO Generic (SKM)",
+                "vendor": "HARDTOOL (ООО «ТехноИнструмент»)",
                 "product-id": item.iso_code,
                 "type": f_type,
                 "unit": "millimeters",

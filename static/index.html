@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0072CE" />
-  <title>SKM · Подбор и заказ пластин (СМП) v2.4.0</title>
+  <meta name="theme-color" content="#D96B27" />
+  <title>HARDTOOL · SKM — Подбор и заказ инструмента v2.5.0</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -13,13 +13,13 @@
 <header class="topbar">
   <div class="topbar-inner">
     <div class="brand">
-      <div class="brand-mark">SKM</div>
+      <div class="brand-mark">HT</div>
       <div>
         <div class="brand-title">
-          SKM · Подбор и заказ пластин
-          <span class="brand-version">v2.4.0</span>
+          HARDTOOL · SKM Подбор и заказ инструмента
+          <span class="brand-version">v2.5.0</span>
         </div>
-        <div class="brand-sub">Коммерческий подбор СМП и осевого инструмента · Подбор по 3D-модели (STEP/STL) и чертежу (DXF/PDF/Фото), остатки, цены, КП и инженерные расчёты</div>
+        <div class="brand-sub">ООО «ТехноИнструмент» · Полный каталог HARDTOOL 2025 (63 поз.) · 3D STEP/DXF, остатки, текущие цены и КП с НДС 22%</div>
       </div>
     </div>
 
@@ -40,7 +40,7 @@
   <nav class="nav-bar" aria-label="Разделы приложения">
     <span class="nav-group-label">Продажи:</span>
     <button class="nav-tab active" data-tab="sales" onclick="switchTab('sales')">
-      🛒 Подбор и заказ <span id="salesCountBadge" class="tab-badge">55</span>
+      🛒 Подбор и заказ <span id="salesCountBadge" class="tab-badge">63</span>
     </button>
     <button class="nav-tab" data-tab="drawing" onclick="switchTab('drawing')">
       📐 Чертёж / 3D <span class="tab-badge">STEP/DXF</span>
@@ -76,7 +76,7 @@
     <section class="card sales-hero">
       <div class="card-head" style="margin-bottom:10px;">
         <div class="card-title" style="color:var(--accent);">Быстрый подбор пластин и инструмента для продажи / заказа</div>
-        <div class="card-subtitle" id="salesSummaryStat">55 позиций в каталоге (включая HARDTOOL 2025)</div>
+        <div class="card-subtitle" id="salesSummaryStat">63 позиции каталога HARDTOOL 2025 · ООО «ТехноИнструмент»</div>
       </div>
 
       <div class="sales-search-row">
@@ -115,12 +115,14 @@
         <button class="mat-pill" data-smat="H" onclick="setSalesMaterial('H')"><span class="mat-dot" style="background:var(--iso-H)"></span>H Закалённая</button>
       </div>
 
-      <!-- Brand / Catalog Filter Pills -->
+      <!-- HARDTOOL 2025 Series Quick Filters -->
       <div class="sales-filter-row" id="salesBrandFilters">
-        <span style="font-size:11.5px;color:var(--muted);font-weight:700;">Каталог:</span>
-        <button class="op-pill active" data-sbrand="ALL" onclick="setSalesBrand('ALL')">Все каталоги (55)</button>
-        <button class="op-pill" data-sbrand="HARDTOOL" onclick="setSalesBrand('HARDTOOL')">★ HARDTOOL 2025 (19)</button>
-        <button class="op-pill" data-sbrand="ISO Generic" onclick="setSalesBrand('ISO Generic')">ISO Базовый (36)</button>
+        <span style="font-size:11.5px;color:var(--accent);font-weight:800;">HARDTOOL 2025:</span>
+        <button class="op-pill active" data-sbrand="ALL" onclick="setSalesBrand('ALL')">Весь каталог HARDTOOL (63)</button>
+        <button class="op-pill" onclick="quickSalesSearch('H9760PMS')">PVD Серебристый H9760PMS</button>
+        <button class="op-pill" onclick="quickSalesSearch('H9960MSH')">PVD Бронзовый H9960MSH</button>
+        <button class="op-pill" onclick="quickSalesSearch('H7270PK')">CVD Сталь/Чугун H7270PK</button>
+        <button class="op-pill" onclick="quickSalesSearch('H040N')">Цветмет H040N</button>
       </div>
 
       <!-- Operation Filter Pills -->
@@ -199,7 +201,7 @@
 
           <div class="field" style="margin-bottom:10px;">
             <label class="switch-row" style="padding:6px 10px;">
-              <span>Включать НДС 20% в расчёт КП</span>
+              <span>Включать НДС 22% в расчёт КП</span>
               <input type="checkbox" id="ordIncludeVat" checked onchange="renderOrderCart()" />
             </label>
           </div>
@@ -974,5 +976,10 @@
 <script src="./cad3d_workpiece.js"></script>
 <script src="./drawing.js"></script>
 <script src="./app.js"></script>
+
+<footer class="ht-corp-footer no-print">
+  <div><b>HARDTOOL · ООО «ТехноИнструмент»</b> · 432006, г. Ульяновск, ул. Локомотивная, дом 2, офис 4</div>
+  <div>Тел.: <a href="tel:+78422290900">+7 (8422) 290-900</a> · E-mail: <a href="mailto:info@cnc73.ru">info@cnc73.ru</a> · <a href="https://cnc73.ru" target="_blank" rel="noopener">cnc73.ru</a></div>
+</footer>
 </body>
 </html>

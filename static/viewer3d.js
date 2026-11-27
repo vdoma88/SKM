@@ -64,8 +64,8 @@
       const hHalf = Math.max(length || ic * 1.3, ic * 1.1) / 2;
       return [[r, hHalf], [-r, hHalf], [-r, -hHalf], [r, -hHalf]];
     }
-    if (shape === "P" || shape === "H" || shape === "O" || shape === "X") {
-      const n = shape === "P" ? 5 : shape === "H" ? 6 : shape === "X" ? 7 : 8;
+    if (shape === "P" || shape === "H" || shape === "O" || shape === "X" || shape === "J") {
+      const n = shape === "P" ? 5 : shape === "H" ? 6 : shape === "X" ? 7 : shape === "J" ? 12 : 8;
       const rv = r / Math.cos(Math.PI / n);
       const pts = [];
       for (let k = 0; k < n; k++) {
