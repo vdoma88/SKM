@@ -41,7 +41,7 @@ from app.sales import (
 
 app = FastAPI(
     title="SKM · ISO Tooling Selector API",
-    version="2.3.4",
+    version="2.3.5",
     description=(
         "Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics, "
         "Taylor tool-life economics, shop-floor warehouse stock, 3D STL/STEP geometry, "
@@ -211,7 +211,7 @@ def health():
         v_prov = "none"
     return {
         "status": "ok",
-        "version": "2.3.4",
+        "version": "2.3.5",
         "storage_mode": repo.mode,
         "vision_configured": bool(raw_key),
         "vision_provider": v_prov,

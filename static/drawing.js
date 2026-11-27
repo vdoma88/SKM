@@ -1176,6 +1176,10 @@
     });
   }
 
+  function getAppState() {
+    return global.state || (typeof state !== "undefined" ? state : null);
+  }
+
   function getDrawingControls() {
     return {
       batchQty: Math.max(1, parseInt(document.getElementById("drwBatchQty")?.value, 10) || 50),
@@ -1258,10 +1262,12 @@
     // Try Live FastAPI /api/drawing/analyze on any HTTP backend (even if initial /api/health timed out on Render wake-up!)
     let handledByApi = false;
     let apiFailReason = "";
+    const appSt = getAppState();
+    const apiBase = appSt ? appSt.apiBase : "";
     const isStaticHost = window.location.protocol === "file:" || window.location.hostname.endsWith("github.io");
-    if (global.state && (!isStaticHost || global.state.apiLive)) {
+    if (!isStaticHost || (appSt && appSt.apiLive)) {
       try {
-        const resp = await fetch(`${global.state.apiBase}/api/drawing/analyze`, {
+        const resp = await fetch(`${apiBase}/api/drawing/analyze`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1286,12 +1292,12 @@
           drawingState.spec = data.plan.spec;
           drawingState.plan = data.plan;
           handledByApi = true;
-          if (!global.state.apiLive) {
-            global.state.apiLive = true;
+          if (appSt && !appSt.apiLive) {
+            appSt.apiLive = true;
             const b = document.getElementById("connBadge");
             const t = document.getElementById("connText");
             if (b) { b.classList.remove("demo"); b.classList.add("live"); }
-            if (t) t.textContent = "FastAPI Live v2.3.4";
+            if (t) t.textContent = "FastAPI Live v2.3.5";
           }
         } else {
           apiFailReason = `Сервер /api/drawing/analyze вернул HTTP ${resp.status}`;
@@ -1408,11 +1414,13 @@
 
   async function runVisionOnCurrentImage() {
     const ctrl = getDrawingControls();
-    if (!ctrl.geminiKey) {
+    const appSt = getAppState();
+    const isStaticHost = window.location.protocol === "file:" || window.location.hostname.endsWith("github.io");
+    if (!ctrl.geminiKey && isStaticHost) {
       showToast("Вставьте Gemini API ключ в поле «ИИ-распознавание сканов».");
       return;
     }
-    localStorage.setItem(GEMINI_KEY_STORAGE, ctrl.geminiKey);
+    if (ctrl.geminiKey) localStorage.setItem(GEMINI_KEY_STORAGE, ctrl.geminiKey);
     if (!drawingState.lastFileBytesB64) {
       showToast("Сначала загрузите скан/фото чертежа (PNG, JPG или PDF).");
       return;
@@ -1420,10 +1428,10 @@
     const badge = document.getElementById("drwMethodBadge");
     if (badge) badge.textContent = "🤖 Gemini / Vertex AI читает чертёж...";
 
-    // Prefer FastAPI backend proxy (supports AQ.* Vertex AI & AIza* without browser CORS issues)
-    if (global.state && (window.location.protocol !== "file:" && !window.location.hostname.endsWith("github.io"))) {
+    // Prefer FastAPI backend proxy (supports Render GEMINI_API_KEY, AQ.* Vertex AI & AIza* without CORS)
+    if (!isStaticHost) {
       try {
-        const resp = await fetch(`${global.state.apiBase}/api/drawing/analyze`, {
+        const resp = await fetch(`${appSt ? appSt.apiBase : ""}/api/drawing/analyze`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1433,7 +1441,7 @@
             batch_qty: ctrl.batchQty,
             stability: ctrl.stability,
             include_holders: ctrl.includeHolders,
-            gemini_api_key: ctrl.geminiKey,
+            gemini_api_key: ctrl.geminiKey || null,
           }),
         });
         if (resp.ok) {
@@ -1486,9 +1494,9 @@
     drawingState.spec.include_holders = document.getElementById("drwIncludeHoldersChk")?.checked !== false;
 
     let apiOk = false;
-    if (global.state && global.state.apiLive) {
+    if (getAppState() && getAppState().apiLive) {
       try {
-        const r = await fetch(`${global.state.apiBase}/api/drawing/plan`, {
+        const r = await fetch(`${(getAppState()?.apiBase || '')}/api/drawing/plan`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(drawingState.spec),
@@ -1622,11 +1630,11 @@
 
     for (const ln of plan.kit_lines) {
       if (!ln.shared_with_step && ln.recommended_qty > 0) {
-        const existing = global.state.orderCart.find((c) => c.item_type === "INSERT" && c.insert_id === ln.insert_id);
+        const existing = getAppState().orderCart.find((c) => c.item_type === "INSERT" && c.insert_id === ln.insert_id);
         if (existing) {
           existing.qty += ln.recommended_qty;
         } else {
-          global.state.orderCart.push({
+          getAppState().orderCart.push({
             line_id: `ln-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             item_type: "INSERT",
             insert_id: ln.insert_id,
@@ -1643,9 +1651,9 @@
 
       if (plan.spec.include_holders && ln.holder_code && !addedHolders.has(ln.holder_code)) {
         addedHolders.add(ln.holder_code);
-        const existingH = global.state.orderCart.find((c) => c.item_type === "HOLDER" && c.code === ln.holder_code);
+        const existingH = getAppState().orderCart.find((c) => c.item_type === "HOLDER" && c.code === ln.holder_code);
         if (!existingH) {
-          global.state.orderCart.push({
+          getAppState().orderCart.push({
             line_id: `ln-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             item_type: "HOLDER",
             insert_id: null,
@@ -1680,10 +1688,10 @@
     const ln = drawingState.plan && drawingState.plan.kit_lines.find((x) => x.step_no === stepNo);
     if (!ln) return;
     const qty = ln.recommended_qty > 0 ? ln.recommended_qty : ln.pack_qty;
-    const existing = global.state.orderCart.find((c) => c.item_type === "INSERT" && c.insert_id === ln.insert_id);
+    const existing = getAppState().orderCart.find((c) => c.item_type === "INSERT" && c.insert_id === ln.insert_id);
     if (existing) existing.qty += qty;
     else {
-      global.state.orderCart.push({
+      getAppState().orderCart.push({
         line_id: `ln-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         item_type: "INSERT",
         insert_id: ln.insert_id,

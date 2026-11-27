@@ -42,7 +42,9 @@ const state = {
   stockItems: [],
   viewerCoatingOverride: null,
   chartBounds: { fMin: 0.05, fMax: 0.5, apMin: 0, apMax: 5 },
+  visionConfigured: false,
 };
+window.state = state;
 
 let viewer3d = null;
 let toastTimer = null;
@@ -2973,25 +2975,28 @@ async function init() {
   if (isStaticHost) {
     state.apiLive = false;
     badge.classList.add("demo");
-    connText.textContent = "Web Demo · v2.3.4 3D CAD";
+    connText.textContent = "Web Demo · v2.3.5 3D CAD";
   } else {
     try {
       const r = await fetch(`${state.apiBase}/api/health`, { signal: AbortSignal.timeout(15000) });
       if (r.ok) {
+        const hData = await r.json().catch(() => ({}));
         state.apiLive = true;
+        state.visionConfigured = !!hData.vision_configured;
         badge.classList.add("live");
+        const vTag = state.visionConfigured ? " · Vision AI" : "";
         const metaRes = await fetch(`${state.apiBase}/api/catalog/meta`);
         if (metaRes.ok) {
           const meta = await metaRes.json();
-          connText.textContent = meta.storage_mode === "postgres" ? "FastAPI + PostgreSQL" : "FastAPI Live v2.3.4";
+          connText.textContent = (meta.storage_mode === "postgres" ? "FastAPI + PostgreSQL" : "FastAPI Live v2.3.5") + vTag;
           if (meta.machines?.length) { FALLBACK_DB.machines = meta.machines; renderMachineSelect(); }
           if (meta.material_subgroups?.length) { FALLBACK_DB.subgroups = meta.material_subgroups; populateSubgroups(); }
         } else {
-          connText.textContent = "FastAPI Live v2.3.4";
+          connText.textContent = "FastAPI Live v2.3.5" + vTag;
         }
       } else {
         badge.classList.add("demo");
-        connText.textContent = "Web Demo · v2.3.4 3D CAD";
+        connText.textContent = "Web Demo · v2.3.5 3D CAD";
       }
     } catch {
       badge.classList.add("demo");

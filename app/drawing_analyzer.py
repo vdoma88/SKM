@@ -21,6 +21,7 @@ import math
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 import zlib
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -663,9 +664,10 @@ def _clean_api_key(api_key: Optional[str]) -> str:
 def _build_vision_endpoint(api_key: str, model: str = "gemini-2.5-flash", api_ver: str = "v1") -> str:
     """Routes AQ.* keys to Vertex AI Express Mode and AIza* keys to Gemini Developer API."""
     clean_key = _clean_api_key(api_key)
+    enc_key = urllib.parse.quote(clean_key, safe="._-")
     if clean_key.startswith("AQ."):
-        return f"https://aiplatform.googleapis.com/{api_ver}/publishers/google/models/{model}:generateContent?key={clean_key}"
-    return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
+        return f"https://aiplatform.googleapis.com/{api_ver}/publishers/google/models/{model}:generateContent?key={enc_key}"
+    return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={enc_key}"
 
 
 def analyze_blueprint_with_gemini_vision(
