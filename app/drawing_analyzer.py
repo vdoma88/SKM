@@ -756,14 +756,13 @@ def _build_openai_attempts(provider: str, clean_key: str) -> Tuple[str, List[Tup
         "Content-Type": "application/json",
         "Accept": "application/json",
         "Authorization": f"Bearer {clean_key}",
-        "User-Agent": "SKM-Tooling-Selector/2.3.8",
+        "User-Agent": "SKM-Tooling-Selector/2.3.9",
     }
 
     if provider == "groq_free":
         url = "https://api.groq.com/openai/v1/chat/completions"
         models = [
-            "meta-llama/llama-4-scout-17b-16e-instruct",
-            "meta-llama/llama-4-maverick-17b-128e-instruct",
+            "qwen/qwen3.8-27b",
         ]
         if custom_model:
             models = [custom_model] + [m for m in models if m != custom_model]
@@ -777,8 +776,8 @@ def _build_openai_attempts(provider: str, clean_key: str) -> Tuple[str, List[Tup
             "X-Title": "SKM Tooling Selector",
         }
         models = [
-            "openrouter/free",
-            "mistralai/mistral-small-3.1-24b-instruct:free",
+            "nvidia/nemotron-3.5-super-vl:free",
+            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
             "google/gemma-4-31b-it:free",
         ]
         if custom_model:
@@ -829,17 +828,27 @@ def test_vision_connection(api_key: Optional[str] = None) -> Dict[str, Any]:
     provider = detect_vision_provider(clean_key)
     if not clean_key:
         return {"ok": False, "provider": "none", "detail": "Ключ Vision AI не задан в Render Environment Variables."}
+    if provider == "github_models":
+        return {
+            "ok": False,
+            "provider": "github_models",
+            "detail": "Сервис GitHub Models официально закрыт 30.07.2026 (отдаёт заглушку OK). Используйте бесплатный ключ Groq (gsk_...) или OpenRouter (sk-or-v1-...).",
+        }
 
     if provider in ("groq_free", "openrouter_free", "github_models"):
         prov_label, attempts = _build_openai_attempts(provider, clean_key)
         errors: List[str] = []
         for url, model_name, hdrs, _ in attempts:
-            payload = {
+            payload: Dict[str, Any] = {
                 "model": model_name,
-                "max_tokens": 40,
+                "max_tokens": 80,
                 "temperature": 0,
                 "messages": [{"role": "user", "content": 'Return JSON {"status":"ok"}'}],
             }
+            if provider == "groq_free" and "qwen3" in model_name:
+                payload["reasoning_effort"] = "none"
+            elif provider == "openrouter_free" and "nemotron-3.5" in model_name:
+                payload["reasoning"] = {"enabled": False}
             req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=hdrs, method="POST")
             try:
                 body, status, final_url = _read_json_http_response(req, timeout=14)
@@ -910,6 +919,13 @@ def analyze_blueprint_with_gemini_vision(
         return None
 
     provider = detect_vision_provider(clean_key)
+    if provider == "github_models":
+        if error_out is not None:
+            error_out.append(
+                "Сервис GitHub Models закрыт 30.07.2026 (эндпоинт отдаёт заглушку OK). "
+                "Замените GEMINI_API_KEY в Render на бесплатный ключ Groq (gsk_..., console.groq.com) или OpenRouter (sk-or-v1-...)."
+            )
+        return None
     b64_img = base64.b64encode(file_bytes).decode("ascii")
 
     prompt = (
@@ -962,6 +978,10 @@ def analyze_blueprint_with_gemini_vision(
             }
             if use_json_fmt:
                 payload["response_format"] = {"type": "json_object"}
+            if provider == "groq_free" and "qwen3" in model_name:
+                payload["reasoning_effort"] = "none"
+            elif provider == "openrouter_free" and "nemotron-3.5" in model_name:
+                payload["reasoning"] = {"enabled": False}
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
@@ -1026,7 +1046,7 @@ def analyze_blueprint_with_gemini_vision(
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json", "User-Agent": "SKM-Tooling-Selector/2.3.8"},
+                headers={"Content-Type": "application/json", "User-Agent": "SKM-Tooling-Selector/2.3.9"},
                 method="POST",
             )
             try:

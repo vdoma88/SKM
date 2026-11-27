@@ -791,9 +791,10 @@ def test_drawing_shaft_h6_vs_hole_H7_and_small_holes():
     assert detect_vision_provider("github_pat_abc") == "github_models"
     assert detect_vision_provider("gsk_abc123") == "groq_free"
     assert "api.groq.com/openai/v1/chat/completions" in _build_vision_endpoint("gsk_abc123")
-    lbl_gh, att_gh = _build_openai_attempts("github_models", "github_pat_test")
-    assert lbl_gh == "GitHub Models" and att_gh[0][2]["Accept"] == "application/vnd.github+json"
-    assert "X-GitHub-Api-Version" in att_gh[0][2] and any("azure.com" in a[0] for a in att_gh)
+    lbl_grq, att_grq = _build_openai_attempts("groq_free", "gsk_test")
+    assert lbl_grq == "Groq Free" and att_grq[0][1] == "qwen/qwen3.8-27b"
+    lbl_or, att_or = _build_openai_attempts("openrouter_free", "sk-or-v1-test")
+    assert lbl_or == "OpenRouter Free" and att_or[0][1] == "nvidia/nemotron-3.5-super-vl:free"
     txt_r, err_r = _extract_openai_text({"choices": [{"message": {"content": None, "refusal": "policy"}}]}) 
     assert txt_r == "" and "Отказ" in (err_r or "")
     assert _extract_json_object("```json\n{\"part_name\":\"Втулка\"}\n```")["part_name"] == "Втулка"
@@ -821,4 +822,4 @@ if __name__ == "__main__":
     test_cad3d_step_brep_feature_recognition_and_tooling_kit()
     test_cad3d_stl_mesh_analyzer_and_housing_step()
     test_drawing_shaft_h6_vs_hole_H7_and_small_holes()
-    print("ALL SKM v2.3.8 GROQ + GITHUB MODELS + OPENROUTER VISION TESTS (21 SUITES) PASSED!")
+    print("ALL SKM v2.3.9 GROQ QWEN3.8 + OPENROUTER NEMOTRON VL TESTS (21 SUITES) PASSED!")
