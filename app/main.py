@@ -32,7 +32,8 @@ from app.repository import ToolingRepository
 from app.cad_workpiece import generate_demo_step_file
 from app.drawing_analyzer import (
     DEMO_BLUEPRINTS, DrawingAnalyzeRequest, DrawingAnalyzeResponse,
-    DrawingSpec, DrawingToolingPlan, analyze_uploaded_drawing, recommend_tooling_for_blueprint,
+    DrawingSpec, DrawingToolingPlan, analyze_uploaded_drawing, detect_vision_provider,
+    recommend_tooling_for_blueprint, resolve_vision_api_key,
 )
 from app.sales import (
     OrderQuoteRequest, OrderQuoteResponse, SalesCatalogItem,
@@ -41,7 +42,7 @@ from app.sales import (
 
 app = FastAPI(
     title="SKM · ISO Tooling Selector API",
-    version="2.3.5",
+    version="2.3.6",
     description=(
         "Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics, "
         "Taylor tool-life economics, shop-floor warehouse stock, 3D STL/STEP geometry, "
@@ -202,19 +203,13 @@ def serve_sw():
 
 @app.get("/api/health")
 def health():
-    raw_key = (os.getenv("GEMINI_API_KEY") or "").strip()
-    if raw_key.startswith("AQ."):
-        v_prov = "vertex_ai_aq"
-    elif raw_key:
-        v_prov = "ai_studio_aiza"
-    else:
-        v_prov = "none"
+    raw_key = resolve_vision_api_key()
     return {
         "status": "ok",
-        "version": "2.3.5",
+        "version": "2.3.6",
         "storage_mode": repo.mode,
         "vision_configured": bool(raw_key),
-        "vision_provider": v_prov,
+        "vision_provider": detect_vision_provider(raw_key),
     }
 
 

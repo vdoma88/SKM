@@ -1297,7 +1297,7 @@
             const b = document.getElementById("connBadge");
             const t = document.getElementById("connText");
             if (b) { b.classList.remove("demo"); b.classList.add("live"); }
-            if (t) t.textContent = "FastAPI Live v2.3.5";
+            if (t) t.textContent = "FastAPI Live v2.3.6";
           }
         } else {
           apiFailReason = `Сервер /api/drawing/analyze вернул HTTP ${resp.status}`;
@@ -1725,7 +1725,7 @@
     const methodLabels = {
       DXF_CAD_GEOMETRY_PARSER: "DXF CAD-парсер (геометрия + текст)",
       PDF_TEXT_ESKD_PARSER: "PDF ЕСКД-парсер текста",
-      GEMINI_VISION_AI: "🤖 Gemini Vision AI",
+      GEMINI_VISION_AI: "🤖 Vision AI (авто-распознавание)",
       IMAGE_PREVIEW_AND_TT: "Изображение + ТТ чертежа",
       DEMO_ESKD_PARSER: "Демо-чертёж ЕСКД",
       ESKD_TEXT_PARSER: "ЕСКД-анализатор текста",

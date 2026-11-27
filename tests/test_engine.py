@@ -22,7 +22,8 @@ import base64
 from app.cad_workpiece import generate_demo_step_file, parse_step_workpiece, parse_stl_workpiece
 from app.drawing_analyzer import (
     DEMO_BLUEPRINTS, DrawingAnalyzeRequest, DrawingFeature, DrawingSpec,
-    _build_vision_endpoint, analyze_uploaded_drawing, parse_dxf_blueprint, recommend_tooling_for_blueprint,
+    _build_vision_endpoint, _extract_json_object, analyze_uploaded_drawing, detect_vision_provider,
+    parse_dxf_blueprint, recommend_tooling_for_blueprint,
 )
 
 
@@ -783,6 +784,11 @@ def test_drawing_shaft_h6_vs_hole_H7_and_small_holes():
     assert any(f.kind == "EXTERNAL_FINISH" for f in resp.plan.spec.features)
     assert "aiplatform.googleapis.com" in _build_vision_endpoint("AQ.Ab8RN6TEST")
     assert "generativelanguage.googleapis.com" in _build_vision_endpoint("AIzaSyTEST")
+    assert "openrouter.ai/api/v1/chat/completions" in _build_vision_endpoint("sk-or-v1-test123")
+    assert "models.github.ai/inference/chat/completions" in _build_vision_endpoint("github_pat_test123")
+    assert detect_vision_provider("sk-or-v1-abc") == "openrouter_free"
+    assert detect_vision_provider("github_pat_abc") == "github_models"
+    assert _extract_json_object("```json\n{\"part_name\":\"Втулка\"}\n```")["part_name"] == "Втулка"
 
 
 if __name__ == "__main__":
@@ -807,4 +813,4 @@ if __name__ == "__main__":
     test_cad3d_step_brep_feature_recognition_and_tooling_kit()
     test_cad3d_stl_mesh_analyzer_and_housing_step()
     test_drawing_shaft_h6_vs_hole_H7_and_small_holes()
-    print("ALL SKM v2.3.2 DRAWING + 3D CAD TESTS (21 SUITES) PASSED!")
+    print("ALL SKM v2.3.6 MULTI-PROVIDER FREE VISION + 3D CAD TESTS (21 SUITES) PASSED!")

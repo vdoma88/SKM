@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0072CE" />
-  <title>SKM · Подбор и заказ пластин (СМП) v2.3.5</title>
+  <title>SKM · Подбор и заказ пластин (СМП) v2.3.6</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -17,7 +17,7 @@
       <div>
         <div class="brand-title">
           SKM · Подбор и заказ пластин
-          <span class="brand-version">v2.3.5</span>
+          <span class="brand-version">v2.3.6</span>
         </div>
         <div class="brand-sub">Коммерческий подбор СМП и осевого инструмента · Подбор по 3D-модели (STEP/STL) и чертежу (DXF/PDF/Фото), остатки, цены, КП и инженерные расчёты</div>
       </div>
@@ -240,8 +240,8 @@
       </div>
 
       <div id="drwVisionKeyPanel" class="drw-vision-panel">
-        <span style="font-size:12px;color:var(--text-soft);font-weight:700;">Gemini Vision API Key (для авто-распознавания фото/сканов):</span>
-        <input id="drwGeminiKeyInput" type="password" style="flex:1;min-width:220px;" placeholder="AIzaSy... (AI Studio) или AQ.A... (Vertex AI)" />
+        <span style="font-size:12px;color:var(--text-soft);font-weight:700;">Ключ Vision AI (без карты: OpenRouter / GitHub Models / Gemini):</span>
+        <input id="drwGeminiKeyInput" type="password" style="flex:1;min-width:220px;" placeholder="sk-or-v1-... (OpenRouter Free), github_pat_... (GitHub) или AIza..." />
         <button class="v-btn" onclick="saveGeminiVisionKey()">Сохранить ключ</button>
         <button class="v-btn accent" onclick="runVisionOnCurrentImage()">🤖 Распознать скан сейчас</button>
       </div>

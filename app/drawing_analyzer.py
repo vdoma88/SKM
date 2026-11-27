@@ -661,13 +661,57 @@ def _clean_api_key(api_key: Optional[str]) -> str:
     return (api_key or "").strip().strip('"').strip("'")
 
 
-def _build_vision_endpoint(api_key: str, model: str = "gemini-2.5-flash", api_ver: str = "v1") -> str:
-    """Routes AQ.* keys to Vertex AI Express Mode and AIza* keys to Gemini Developer API."""
+def resolve_vision_api_key(request_key: Optional[str] = None) -> str:
+    """Resolves Vision AI key from request or environment (supports OpenRouter, GitHub Models, AI Studio, Vertex)."""
+    for candidate in (
+        request_key,
+        os.getenv("VISION_API_KEY"),
+        os.getenv("OPENROUTER_API_KEY"),
+        os.getenv("GITHUB_MODELS_TOKEN"),
+        os.getenv("GEMINI_API_KEY"),
+    ):
+        cleaned = _clean_api_key(candidate)
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def detect_vision_provider(api_key: str) -> str:
     clean_key = _clean_api_key(api_key)
+    if not clean_key:
+        return "none"
+    if clean_key.startswith("sk-or-"):
+        return "openrouter_free"
+    if clean_key.startswith(("github_pat_", "ghp_")):
+        return "github_models"
+    if clean_key.startswith("AQ."):
+        return "vertex_ai_aq"
+    return "ai_studio_aiza"
+
+
+def _build_vision_endpoint(api_key: str, model: str = "gemini-2.5-flash", api_ver: str = "v1") -> str:
+    """Routes keys to OpenRouter, GitHub Models, Vertex AI Express Mode, or Gemini Developer API."""
+    clean_key = _clean_api_key(api_key)
+    if clean_key.startswith("sk-or-"):
+        return "https://openrouter.ai/api/v1/chat/completions"
+    if clean_key.startswith(("github_pat_", "ghp_")):
+        return "https://models.github.ai/inference/chat/completions"
     enc_key = urllib.parse.quote(clean_key, safe="._-")
     if clean_key.startswith("AQ."):
         return f"https://aiplatform.googleapis.com/{api_ver}/publishers/google/models/{model}:generateContent?key={enc_key}"
     return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={enc_key}"
+
+
+def _extract_json_object(raw_text: str) -> Dict[str, Any]:
+    txt = (raw_text or "").strip()
+    txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", txt, flags=re.IGNORECASE).strip()
+    try:
+        return json.loads(txt)
+    except ValueError:
+        m = re.search(r"\{[\s\S]*\}", txt)
+        if m:
+            return json.loads(m.group(0))
+        raise
 
 
 def analyze_blueprint_with_gemini_vision(
@@ -681,19 +725,29 @@ def analyze_blueprint_with_gemini_vision(
     error_out: Optional[List[str]] = None,
 ) -> Optional[DrawingSpec]:
     """
-    Optional Gemini Vision REST API call (stdlib urllib only) to read scanned raster blueprints.
-    Supports both Google AI Studio keys (AIza...) and Vertex AI Express Mode keys (AQ....).
+    Universal Vision AI REST client (stdlib urllib only) to read scanned raster blueprints.
+    Auto-routes by key prefix:
+      - sk-or-*             -> OpenRouter Free Vision (no billing card required)
+      - github_pat_* / ghp_ -> GitHub Models gpt-4o-mini (no billing card required)
+      - AIza*               -> Google AI Studio Gemini API
+      - AQ.*                -> Vertex AI Express Mode
     """
-    clean_key = (api_key or "").strip()
+    clean_key = _clean_api_key(api_key)
     if not clean_key:
         return None
 
+    provider = detect_vision_provider(clean_key)
+    b64_img = base64.b64encode(file_bytes).decode("ascii")
+
     prompt = (
-        "You are a CNC manufacturing & ESKD blueprint engineer. Analyze this engineering drawing "
-        "and return ONLY valid JSON (no markdown fences) with this schema:\n"
+        "You are a CNC manufacturing & ESKD blueprint engineer. Analyze this engineering drawing carefully. "
+        "Read all outer diameters, internal bore diameters, ISO 286 tolerances (remember uppercase H7/H8/IT6 = hole, "
+        "lowercase h6/h7 = external shaft), surface roughness Ra, grooves (width & diameter), threads (M/MF/G/NPT), "
+        "and small drilled holes (including radial oil holes like 2 отв. Ø2). "
+        "Return ONLY valid JSON (no markdown, no explanation) with this exact schema:\n"
         "{\n"
-        '  "part_name": "short Russian part name from title block",\n'
-        '  "material_text": "material & hardness from title block, e.g. Сталь 40Х HRC 52 or 12Х18Н10Т or Д16Т",\n'
+        '  "part_name": "short Russian part name, e.g. Втулка ступенчатая Ø58x70",\n'
+        '  "material_text": "material & hardness from title block, or Сталь 45 if not specified on drawing",\n'
         '  "envelope_diameter_mm": number or null,\n'
         '  "envelope_length_mm": number or null,\n'
         '  "ra_min_um": number or null,\n'
@@ -706,60 +760,112 @@ def analyze_blueprint_with_gemini_vision(
         "}"
     )
 
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [
-                    {"text": prompt},
+    data: Optional[Dict[str, Any]] = None
+    last_err = ""
+
+    if provider in ("openrouter_free", "github_models"):
+        url = _build_vision_endpoint(clean_key)
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {clean_key}",
+        }
+        if provider == "openrouter_free":
+            headers["HTTP-Referer"] = "https://skm-tooling-selector.onrender.com"
+            headers["X-Title"] = "SKM Tooling Selector"
+            models = ["google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free", "openrouter/free"]
+            prov_label = "OpenRouter Free"
+        else:
+            models = ["openai/gpt-4o-mini", "openai/gpt-4.1-mini"]
+            prov_label = "GitHub Models"
+
+        data_uri = f"data:{mime_type};base64,{b64_img}"
+        for model_name in models:
+            payload: Dict[str, Any] = {
+                "model": model_name,
+                "temperature": 0.1,
+                "messages": [
                     {
-                        "inlineData": {
-                            "mimeType": mime_type,
-                            "data": base64.b64encode(file_bytes).decode("ascii"),
-                        }
-                    },
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": data_uri}},
+                        ],
+                    }
                 ],
             }
-        ],
-        "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
-    }
-    clean_key = _clean_api_key(clean_key)
-    attempts = (
-        [("gemini-2.5-flash", "v1"), ("gemini-2.5-flash", "v1beta1"), ("gemini-2.0-flash", "v1")]
-        if clean_key.startswith("AQ.")
-        else [("gemini-2.5-flash", "v1beta"), ("gemini-2.0-flash", "v1beta")]
-    )
-    data = None
-    last_err = ""
-    for model_name, api_ver in attempts:
-        url = _build_vision_endpoint(clean_key, model_name, api_ver)
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=35) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            text_out = body["candidates"][0]["content"]["parts"][0]["text"]
-            text_out = re.sub(r"^```json\s*|\s*```$", "", text_out.strip())
-            data = json.loads(text_out)
-            break
-        except urllib.error.HTTPError as exc:
-            err_body = ""
+            if provider == "github_models":
+                payload["response_format"] = {"type": "json_object"}
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
             try:
-                err_body = exc.read().decode("utf-8", errors="ignore")[:260]
-            except Exception:
-                pass
-            provider = "Vertex AI (AQ.*)" if clean_key.startswith("AQ.") else "Gemini AI Studio (AIza*)"
-            last_err = f"Ошибка {provider} ({model_name}/{api_ver}) HTTP {exc.code}: {err_body or exc.reason}"
-            # Retry next model/version only on 404 (model/path not found) or 400
-            if exc.code not in (404, 400):
+                with urllib.request.urlopen(req, timeout=45) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                msg_content = body["choices"][0]["message"]["content"]
+                if isinstance(msg_content, list):
+                    msg_content = "".join(p.get("text", "") for p in msg_content if isinstance(p, dict))
+                data = _extract_json_object(str(msg_content))
                 break
-        except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as exc:
-            last_err = f"Сбой запроса Vision AI ({model_name}): {exc}"
-            break
+            except urllib.error.HTTPError as exc:
+                err_body = ""
+                try:
+                    err_body = exc.read().decode("utf-8", errors="ignore")[:260]
+                except Exception:
+                    pass
+                last_err = f"Ошибка {prov_label} ({model_name}) HTTP {exc.code}: {err_body or exc.reason}"
+                if exc.code in (401, 403):
+                    break
+            except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as exc:
+                last_err = f"Сбой запроса {prov_label} ({model_name}): {exc}"
+                continue
+    else:
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {"inlineData": {"mimeType": mime_type, "data": b64_img}},
+                    ],
+                }
+            ],
+            "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
+        }
+        attempts = (
+            [("gemini-2.5-flash", "v1"), ("gemini-2.5-flash", "v1beta1"), ("gemini-2.0-flash", "v1")]
+            if provider == "vertex_ai_aq"
+            else [("gemini-2.5-flash", "v1beta"), ("gemini-2.0-flash", "v1beta")]
+        )
+        for model_name, api_ver in attempts:
+            url = _build_vision_endpoint(clean_key, model_name, api_ver)
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=35) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                text_out = body["candidates"][0]["content"]["parts"][0]["text"]
+                data = _extract_json_object(text_out)
+                break
+            except urllib.error.HTTPError as exc:
+                err_body = ""
+                try:
+                    err_body = exc.read().decode("utf-8", errors="ignore")[:260]
+                except Exception:
+                    pass
+                prov_label = "Vertex AI (AQ.*)" if provider == "vertex_ai_aq" else "Gemini AI Studio (AIza*)"
+                last_err = f"Ошибка {prov_label} ({model_name}/{api_ver}) HTTP {exc.code}: {err_body or exc.reason}"
+                if exc.code not in (404, 400):
+                    break
+            except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as exc:
+                last_err = f"Сбой запроса Vision AI ({model_name}): {exc}"
+                break
 
     if data is None:
         if error_out is not None and last_err:
@@ -1292,7 +1398,7 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
         if pdf_txt.strip():
             extracted_text = (extracted_text + "\n" + pdf_txt).strip()
             method = "PDF_TEXT_ESKD_PARSER"
-        api_key = _clean_api_key(req.gemini_api_key or os.getenv("GEMINI_API_KEY"))
+        api_key = resolve_vision_api_key(req.gemini_api_key)
         if not pdf_txt.strip() and api_key:
             vision_spec = analyze_blueprint_with_gemini_vision(
                 raw_bytes, "application/pdf", api_key, fname, req.batch_qty, req.stability, req.include_holders, error_out=vision_errors
@@ -1302,7 +1408,7 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
 
     elif ext in ("png", "jpg", "jpeg", "webp", "bmp") and raw_bytes:
         mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
-        api_key = _clean_api_key(req.gemini_api_key or os.getenv("GEMINI_API_KEY"))
+        api_key = resolve_vision_api_key(req.gemini_api_key)
         if api_key:
             vision_spec = analyze_blueprint_with_gemini_vision(
                 raw_bytes, mime, api_key, fname, req.batch_qty, req.stability, req.include_holders, error_out=vision_errors
