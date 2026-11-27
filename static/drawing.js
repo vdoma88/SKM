@@ -115,6 +115,7 @@
     activeDemoId: "demo-shaft-p1",
     addFormOpen: false,
     visionPanelOpen: false,
+    isAnalyzing: false,
   };
 
   // ---------------------------------------------------------------------------
@@ -1136,6 +1137,7 @@
     drawingState.spec = buildSpecFromCad3dClient(cad3d, demo.notes, ctrl.batchQty, ctrl.stability, ctrl.includeHolders);
     drawingState.plan = recommendToolingForBlueprintClient(drawingState.spec);
 
+    drawingState.isAnalyzing = false;
     syncSpecControlsFromState();
     renderDrawingWorkspace();
     renderDrw3DModel();
@@ -1176,6 +1178,39 @@
     });
   }
 
+  function compressImageForVision(file, maxSide = 1600, quality = 0.86) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let w = img.naturalWidth || img.width;
+          let h = img.naturalHeight || img.height;
+          if (!w || !h) { URL.revokeObjectURL(url); resolve(null); return; }
+          const scale = Math.min(1, maxSide / Math.max(w, h));
+          const tw = Math.max(1, Math.round(w * scale));
+          const th = Math.max(1, Math.round(h * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = tw;
+          canvas.height = th;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, tw, th);
+          ctx.drawImage(img, 0, 0, tw, th);
+          const dataUrl = canvas.toDataURL("image/jpeg", quality);
+          URL.revokeObjectURL(url);
+          const idx = dataUrl.indexOf(",");
+          resolve(idx >= 0 ? { b64: dataUrl.slice(idx + 1), mime: "image/jpeg" } : null);
+        } catch {
+          URL.revokeObjectURL(url);
+          resolve(null);
+        }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }
+
   function getAppState() {
     return global.state || (typeof state !== "undefined" ? state : null);
   }
@@ -1210,11 +1245,23 @@
     }
 
     const statusBadge = document.getElementById("drwMethodBadge");
-    if (statusBadge) statusBadge.textContent = `Анализ ${file.name}...`;
+    if (statusBadge) statusBadge.textContent = `⏳ Загрузка ${file.name}...`;
+    console.info("[SKM] Загрузка файла чертежа:", file.name, file.size, "bytes");
 
-    const b64 = await fileToBase64(file);
+    let b64 = "";
+    let uploadMime = file.type || (ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`);
+    let uploadFilename = file.name;
+    if (["png", "jpg", "jpeg", "webp", "bmp"].includes(ext)) {
+      const comp = await compressImageForVision(file);
+      if (comp && comp.b64) {
+        b64 = comp.b64;
+        uploadMime = comp.mime;
+        uploadFilename = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+      }
+    }
+    if (!b64) b64 = await fileToBase64(file);
     drawingState.lastFileBytesB64 = b64;
-    drawingState.lastFileMime = file.type || (ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`);
+    drawingState.lastFileMime = uploadMime;
 
     drawingState.cad3dSummary = null;
     drawingState.cad3dDemoKind = null;
@@ -1259,6 +1306,12 @@
       ctrl.notesText = txt;
     }
 
+    // Render preview IMMEDIATELY so the user sees their uploaded drawing right away while server Vision AI runs!
+    drawingState.isAnalyzing = true;
+    drawingState.analysisMethod = "ANALYZING";
+    renderDrawingWorkspace();
+    showToast(`📂 Файл «${file.name}» принят — идёт распознавание на сервере...`);
+
     // Try Live FastAPI /api/drawing/analyze on any HTTP backend (even if initial /api/health timed out on Render wake-up!)
     let handledByApi = false;
     let apiFailReason = "";
@@ -1267,11 +1320,15 @@
     const isStaticHost = window.location.protocol === "file:" || window.location.hostname.endsWith("github.io");
     if (!isStaticHost || (appSt && appSt.apiLive)) {
       try {
+        console.info("[SKM] POST /api/drawing/analyze ->", uploadFilename, `(${Math.round(b64.length / 1024)} KB b64)`);
+        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const timerId = controller ? setTimeout(() => controller.abort(), 55000) : null;
         const resp = await fetch(`${apiBase}/api/drawing/analyze`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller ? controller.signal : undefined,
           body: JSON.stringify({
-            filename: file.name,
+            filename: uploadFilename,
             content_base64: b64,
             notes_text: ctrl.notesText,
             batch_qty: ctrl.batchQty,
@@ -1280,6 +1337,8 @@
             gemini_api_key: ctrl.geminiKey || null,
           }),
         });
+        if (timerId) clearTimeout(timerId);
+        console.info("[SKM] /api/drawing/analyze status:", resp.status);
         if (resp.ok) {
           const data = await resp.json();
           drawingState.analysisMethod = data.analysis_method;
@@ -1297,7 +1356,7 @@
             const b = document.getElementById("connBadge");
             const t = document.getElementById("connText");
             if (b) { b.classList.remove("demo"); b.classList.add("live"); }
-            if (t) t.textContent = "FastAPI Live v2.3.6";
+            if (t) t.textContent = "FastAPI Live v2.3.7";
           }
         } else {
           apiFailReason = `Сервер /api/drawing/analyze вернул HTTP ${resp.status}`;
@@ -1425,8 +1484,9 @@
       showToast("Сначала загрузите скан/фото чертежа (PNG, JPG или PDF).");
       return;
     }
-    const badge = document.getElementById("drwMethodBadge");
-    if (badge) badge.textContent = "🤖 Gemini / Vertex AI читает чертёж...";
+    drawingState.isAnalyzing = true;
+    drawingState.analysisMethod = "ANALYZING";
+    renderDrawingWorkspace();
 
     // Prefer FastAPI backend proxy (supports Render GEMINI_API_KEY, AQ.* Vertex AI & AIza* without CORS)
     if (!isStaticHost) {
@@ -1446,6 +1506,7 @@
         });
         if (resp.ok) {
           const data = await resp.json();
+          drawingState.isAnalyzing = false;
           drawingState.analysisMethod = data.analysis_method;
           drawingState.spec = data.plan.spec;
           drawingState.plan = data.plan;
@@ -1465,8 +1526,9 @@
       drawingState.lastFileBytesB64, drawingState.lastFileMime, ctrl.geminiKey,
       drawingState.filename, ctrl.batchQty, ctrl.stability, ctrl.includeHolders
     );
+    drawingState.isAnalyzing = false;
     if (!spec) {
-      showToast("Не удалось распознать скан — проверьте ключ API (AIza... или AQ....) или введите ТТ вручную.");
+      showToast("Не удалось распознать скан — проверьте ключ API или введите ТТ вручную.");
       renderDrawingWorkspace();
       return;
     }
@@ -1725,6 +1787,7 @@
     const methodLabels = {
       DXF_CAD_GEOMETRY_PARSER: "DXF CAD-парсер (геометрия + текст)",
       PDF_TEXT_ESKD_PARSER: "PDF ЕСКД-парсер текста",
+      ANALYZING: "⏳ Распознавание чертежа (Vision AI)...",
       GEMINI_VISION_AI: "🤖 Vision AI (авто-распознавание)",
       IMAGE_PREVIEW_AND_TT: "Изображение + ТТ чертежа",
       DEMO_ESKD_PARSER: "Демо-чертёж ЕСКД",
@@ -1827,7 +1890,12 @@
     }
 
     const kitEl = document.getElementById("drwKitList");
-    if (kitEl) {
+    if (kitEl && drawingState.isAnalyzing) {
+      kitEl.innerHTML = `<div class="empty-state" style="border-color:var(--accent);color:var(--accent);padding:26px 16px;">
+        <div style="font-size:15px;font-weight:800;margin-bottom:6px;">⏳ ИИ-зрение анализирует чертёж «${drawingState.filename}»...</div>
+        <div style="font-size:12.5px;color:var(--text-soft);">Обычно занимает 5–20 секунд на бесплатных моделях OpenRouter. Предпросмотр чертежа уже открыт слева.</div>
+      </div>`;
+    } else if (kitEl) {
       kitEl.innerHTML = plan.kit_lines.map((ln) => {
         const stockTag = ln.stock_qty > 0
           ? `<span class="stock-badge">🟢 Склад: ${ln.stock_qty} шт</span>`
@@ -1898,7 +1966,7 @@
       ["dragleave", "drop"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove("dragover"); }));
       dz.addEventListener("drop", (e) => {
         const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (f) handleDrawingFile(f);
+        if (f) handleDrawingFile(f).catch((err) => { drawingState.isAnalyzing = false; console.error("[SKM] File analyze error:", err); showToast("Ошибка обработки файла: " + (err?.message || err)); renderDrawingWorkspace(); });
       });
     }
 
@@ -1909,7 +1977,7 @@
   function handleDrawingFileInput(evt) {
     const f = evt.target.files && evt.target.files[0];
     evt.target.value = "";
-    if (f) handleDrawingFile(f);
+    if (f) handleDrawingFile(f).catch((err) => { drawingState.isAnalyzing = false; console.error("[SKM] File analyze error:", err); showToast("Ошибка обработки файла: " + (err?.message || err)); renderDrawingWorkspace(); });
   }
 
   // Expose functions globally for HTML inline handlers

@@ -769,20 +769,25 @@ def analyze_blueprint_with_gemini_vision(
             "Content-Type": "application/json",
             "Authorization": f"Bearer {clean_key}",
         }
+        custom_model = _clean_api_key(os.getenv("VISION_MODEL"))
         if provider == "openrouter_free":
             headers["HTTP-Referer"] = "https://skm-tooling-selector.onrender.com"
             headers["X-Title"] = "SKM Tooling Selector"
-            models = ["google/gemma-4-31b-it:free", "google/gemma-4-26b-a4b-it:free", "openrouter/free"]
+            models = ["openrouter/free", "google/gemma-4-31b-it:free", "google/gemma-3-27b-it:free"]
             prov_label = "OpenRouter Free"
         else:
             models = ["openai/gpt-4o-mini", "openai/gpt-4.1-mini"]
             prov_label = "GitHub Models"
+        if custom_model:
+            models = [custom_model] + [m for m in models if m != custom_model]
 
         data_uri = f"data:{mime_type};base64,{b64_img}"
+        attempt_errors: List[str] = []
         for model_name in models:
             payload: Dict[str, Any] = {
                 "model": model_name,
                 "temperature": 0.1,
+                "max_tokens": 1400,
                 "messages": [
                     {
                         "role": "user",
@@ -802,7 +807,7 @@ def analyze_blueprint_with_gemini_vision(
                 method="POST",
             )
             try:
-                with urllib.request.urlopen(req, timeout=45) as resp:
+                with urllib.request.urlopen(req, timeout=18) as resp:
                     body = json.loads(resp.read().decode("utf-8"))
                 msg_content = body["choices"][0]["message"]["content"]
                 if isinstance(msg_content, list):
@@ -812,15 +817,21 @@ def analyze_blueprint_with_gemini_vision(
             except urllib.error.HTTPError as exc:
                 err_body = ""
                 try:
-                    err_body = exc.read().decode("utf-8", errors="ignore")[:260]
+                    err_body = exc.read().decode("utf-8", errors="ignore")[:220]
                 except Exception:
                     pass
-                last_err = f"Ошибка {prov_label} ({model_name}) HTTP {exc.code}: {err_body or exc.reason}"
+                err_msg = f"{prov_label} ({model_name}) HTTP {exc.code}: {err_body or exc.reason}"
+                attempt_errors.append(err_msg)
+                last_err = f"Ошибка {err_msg}"
                 if exc.code in (401, 403):
                     break
-            except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as exc:
-                last_err = f"Сбой запроса {prov_label} ({model_name}): {exc}"
+            except (urllib.error.URLError, KeyError, ValueError, TimeoutError, OSError) as exc:
+                err_msg = f"{prov_label} ({model_name}): {exc}"
+                attempt_errors.append(err_msg)
+                last_err = f"Сбой запроса {err_msg}"
                 continue
+        if data is None and len(attempt_errors) > 1:
+            last_err = " | ".join(attempt_errors[:3])
     else:
         payload = {
             "contents": [
