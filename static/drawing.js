@@ -959,14 +959,18 @@
       '{"part_name":"short Russian name","material_text":"e.g. Сталь 40Х HRC 52 or 12Х18Н10Т","envelope_diameter_mm":null,"envelope_length_mm":null,"ra_min_um":null,' +
       '"features":[{"kind":"EXTERNAL_ROUGH|EXTERNAL_FINISH|INTERNAL_BORE|GROOVE_PARTING|THREAD_EXTERNAL|THREAD_INTERNAL|HOLE_DRILL|HOLE_PRECISION|FACE_MILL|SHOULDER_POCKET|COPY_3D",' +
       '"title":"Russian title","diameter_mm":null,"length_or_depth_mm":null,"width_mm":null,"count":1,"thread_code":null,"tolerance":null,"ra_um":null,"hole_type":"BLIND"}]}';
+    const cleanKey = (apiKey || "").trim();
+    const endpoint = cleanKey.startsWith("AQ.")
+      ? `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(cleanKey)}`
+      : `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(cleanKey)}`;
     try {
       const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+        endpoint,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: b64Data } }] }],
+            contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: mimeType, data: b64Data } }] }],
             generationConfig: { temperature: 0.1, responseMimeType: "application/json" },
           }),
         }
@@ -1399,13 +1403,47 @@
       return;
     }
     const badge = document.getElementById("drwMethodBadge");
-    if (badge) badge.textContent = "🤖 Gemini Vision читает чертёж...";
+    if (badge) badge.textContent = "🤖 Gemini / Vertex AI читает чертёж...";
+
+    // Prefer FastAPI backend proxy (supports AQ.* Vertex AI & AIza* without browser CORS issues)
+    if (global.state && global.state.apiLive) {
+      try {
+        const resp = await fetch(`${global.state.apiBase}/api/drawing/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: drawingState.filename || "scan.jpg",
+            content_base64: drawingState.lastFileBytesB64,
+            notes_text: "",
+            batch_qty: ctrl.batchQty,
+            stability: ctrl.stability,
+            include_holders: ctrl.includeHolders,
+            gemini_api_key: ctrl.geminiKey,
+          }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          drawingState.analysisMethod = data.analysis_method;
+          drawingState.spec = data.plan.spec;
+          drawingState.plan = data.plan;
+          syncSpecControlsFromState();
+          renderDrawingWorkspace();
+          if (data.analysis_method === "GEMINI_VISION_AI") {
+            showToast(`🤖 ИИ распознал ${data.plan.spec.features.length} элементов на чертеже!`);
+          } else {
+            showToast("Сервер не смог распознать скан — см. причину в жёлтом блоке справа.");
+          }
+          return;
+        }
+      } catch {}
+    }
+
     const spec = await analyzeImageWithGeminiClient(
       drawingState.lastFileBytesB64, drawingState.lastFileMime, ctrl.geminiKey,
       drawingState.filename, ctrl.batchQty, ctrl.stability, ctrl.includeHolders
     );
     if (!spec) {
-      showToast("Не удалось распознать через Gemini Vision — проверьте ключ API или введите ТТ вручную.");
+      showToast("Не удалось распознать скан — проверьте ключ API (AIza... или AQ....) или введите ТТ вручную.");
       renderDrawingWorkspace();
       return;
     }
@@ -1414,7 +1452,7 @@
     drawingState.plan = recommendToolingForBlueprintClient(spec);
     syncSpecControlsFromState();
     renderDrawingWorkspace();
-    showToast(`🤖 Gemini Vision распознал ${spec.features.length} элементов на чертеже!`);
+    showToast(`🤖 ИИ распознал ${spec.features.length} элементов на чертеже!`);
   }
 
   async function recomputeDrawingPlan() {

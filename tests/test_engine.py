@@ -22,7 +22,7 @@ import base64
 from app.cad_workpiece import generate_demo_step_file, parse_step_workpiece, parse_stl_workpiece
 from app.drawing_analyzer import (
     DEMO_BLUEPRINTS, DrawingAnalyzeRequest, DrawingFeature, DrawingSpec,
-    analyze_uploaded_drawing, parse_dxf_blueprint, recommend_tooling_for_blueprint,
+    _build_vision_endpoint, analyze_uploaded_drawing, parse_dxf_blueprint, recommend_tooling_for_blueprint,
 )
 
 
@@ -781,6 +781,8 @@ def test_drawing_shaft_h6_vs_hole_H7_and_small_holes():
     assert ("HOLE_PRECISION", 32.0) in feats
     assert ("HOLE_DRILL", 2.0) in feats
     assert any(f.kind == "EXTERNAL_FINISH" for f in resp.plan.spec.features)
+    assert "aiplatform.googleapis.com" in _build_vision_endpoint("AQ.Ab8RN6TEST")
+    assert "generativelanguage.googleapis.com" in _build_vision_endpoint("AIzaSyTEST")
 
 
 if __name__ == "__main__":

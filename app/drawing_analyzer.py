@@ -656,6 +656,14 @@ def parse_drawing_annotations(
     )
 
 
+def _build_vision_endpoint(api_key: str, model: str = "gemini-2.5-flash") -> str:
+    """Routes AQ.* keys to Vertex AI Express Mode and AIza* keys to Gemini Developer API."""
+    clean_key = (api_key or "").strip()
+    if clean_key.startswith("AQ."):
+        return f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model}:generateContent?key={clean_key}"
+    return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
+
+
 def analyze_blueprint_with_gemini_vision(
     file_bytes: bytes,
     mime_type: str,
@@ -664,12 +672,14 @@ def analyze_blueprint_with_gemini_vision(
     batch_qty: int = 50,
     stability: Literal["STABLE", "INTERRUPTED", "UNSTABLE"] = "STABLE",
     include_holders: bool = True,
+    error_out: Optional[List[str]] = None,
 ) -> Optional[DrawingSpec]:
     """
     Optional Gemini Vision REST API call (stdlib urllib only) to read scanned raster blueprints.
-    Returns parsed DrawingSpec or None on failure.
+    Supports both Google AI Studio keys (AIza...) and Vertex AI Express Mode keys (AQ....).
     """
-    if not api_key:
+    clean_key = (api_key or "").strip()
+    if not clean_key:
         return None
 
     prompt = (
@@ -693,20 +703,21 @@ def analyze_blueprint_with_gemini_vision(
     payload = {
         "contents": [
             {
+                "role": "user",
                 "parts": [
                     {"text": prompt},
                     {
-                        "inline_data": {
-                            "mime_type": mime_type,
+                        "inlineData": {
+                            "mimeType": mime_type,
                             "data": base64.b64encode(file_bytes).decode("ascii"),
                         }
                     },
-                ]
+                ],
             }
         ],
         "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
     }
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    url = _build_vision_endpoint(clean_key, "gemini-2.5-flash")
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -714,12 +725,24 @@ def analyze_blueprint_with_gemini_vision(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=25) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read().decode("utf-8"))
         text_out = body["candidates"][0]["content"]["parts"][0]["text"]
         text_out = re.sub(r"^```json\s*|\s*```$", "", text_out.strip())
         data = json.loads(text_out)
-    except (urllib.error.URLError, KeyError, ValueError, TimeoutError):
+    except urllib.error.HTTPError as exc:
+        err_body = ""
+        try:
+            err_body = exc.read().decode("utf-8", errors="ignore")[:220]
+        except Exception:
+            pass
+        if error_out is not None:
+            provider = "Vertex AI (AQ.*)" if clean_key.startswith("AQ.") else "Gemini AI Studio (AIza*)"
+            error_out.append(f"Ошибка {provider} HTTP {exc.code}: {err_body or exc.reason}")
+        return None
+    except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as exc:
+        if error_out is not None:
+            error_out.append(f"Сбой запроса Vision AI: {exc}")
         return None
 
     sg, grp, mat_disp, hrc_val = detect_material(str(data.get("material_text", "")))
@@ -1219,6 +1242,7 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
     extracted_text = (req.notes_text or "").strip()
     method = "ESKD_TEXT_PARSER"
     vision_spec: Optional[DrawingSpec] = None
+    vision_errors: List[str] = []
 
     if ext in ("step", "stp") and raw_bytes:
         step_str = raw_bytes.decode("utf-8", errors="ignore")
@@ -1250,7 +1274,7 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
         api_key = req.gemini_api_key or os.getenv("GEMINI_API_KEY")
         if not pdf_txt.strip() and api_key:
             vision_spec = analyze_blueprint_with_gemini_vision(
-                raw_bytes, "application/pdf", api_key, fname, req.batch_qty, req.stability, req.include_holders
+                raw_bytes, "application/pdf", api_key, fname, req.batch_qty, req.stability, req.include_holders, error_out=vision_errors
             )
             if vision_spec:
                 method = "GEMINI_VISION_AI"
@@ -1260,7 +1284,7 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
         api_key = req.gemini_api_key or os.getenv("GEMINI_API_KEY")
         if api_key:
             vision_spec = analyze_blueprint_with_gemini_vision(
-                raw_bytes, mime, api_key, fname, req.batch_qty, req.stability, req.include_holders
+                raw_bytes, mime, api_key, fname, req.batch_qty, req.stability, req.include_holders, error_out=vision_errors
             )
             if vision_spec:
                 method = "GEMINI_VISION_AI"
@@ -1279,11 +1303,14 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
         include_holders=req.include_holders,
     )
     plan = recommend_tooling_for_blueprint(repo, spec)
-    if method == "IMAGE_PREVIEW_AND_TT" and not extracted_text:
+    if vision_errors:
+        for ve in reversed(vision_errors):
+            plan.warnings.insert(0, ve)
+    elif method == "IMAGE_PREVIEW_AND_TT" and not extracted_text:
         plan.warnings.insert(
             0,
             "Загружено растровое изображение (JPG/PNG), но GEMINI_API_KEY не настроен на сервере Render и не введён в браузере. "
-            "Добавьте GEMINI_API_KEY в Render Environment Variables или впишите размеры с чертежа в поле «Технические требования (ТТ)» ниже.",
+            "Добавьте GEMINI_API_KEY (AIza... или Vertex AQ....) в Render Environment Variables или впишите размеры с чертежа в поле «Технические требования (ТТ)» ниже.",
         )
     return DrawingAnalyzeResponse(
         detected_format=ext.upper(),
