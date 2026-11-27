@@ -33,7 +33,7 @@ from app.cad_workpiece import generate_demo_step_file
 from app.drawing_analyzer import (
     DEMO_BLUEPRINTS, DrawingAnalyzeRequest, DrawingAnalyzeResponse,
     DrawingSpec, DrawingToolingPlan, analyze_uploaded_drawing, detect_vision_provider,
-    recommend_tooling_for_blueprint, resolve_vision_api_key,
+    recommend_tooling_for_blueprint, resolve_vision_api_key, test_vision_connection,
 )
 from app.sales import (
     OrderQuoteRequest, OrderQuoteResponse, SalesCatalogItem,
@@ -42,7 +42,7 @@ from app.sales import (
 
 app = FastAPI(
     title="SKM · ISO Tooling Selector API",
-    version="2.3.7",
+    version="2.3.8",
     description=(
         "Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics, "
         "Taylor tool-life economics, shop-floor warehouse stock, 3D STL/STEP geometry, "
@@ -206,7 +206,7 @@ def health():
     raw_key = resolve_vision_api_key()
     return {
         "status": "ok",
-        "version": "2.3.7",
+        "version": "2.3.8",
         "storage_mode": repo.mode,
         "vision_configured": bool(raw_key),
         "vision_provider": detect_vision_provider(raw_key),
@@ -600,6 +600,11 @@ def api_delete_order(order_id: str):
 # -----------------------------------------------------------------------------
 # v2.2 Blueprint / Drawing-to-Tooling Analyzer Endpoints
 # -----------------------------------------------------------------------------
+
+@app.get("/api/drawing/vision-test")
+def api_drawing_vision_test():
+    return test_vision_connection()
+
 
 @app.get("/api/drawing/presets")
 def api_drawing_presets():

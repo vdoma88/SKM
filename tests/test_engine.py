@@ -22,7 +22,8 @@ import base64
 from app.cad_workpiece import generate_demo_step_file, parse_step_workpiece, parse_stl_workpiece
 from app.drawing_analyzer import (
     DEMO_BLUEPRINTS, DrawingAnalyzeRequest, DrawingFeature, DrawingSpec,
-    _build_vision_endpoint, _extract_json_object, analyze_uploaded_drawing, detect_vision_provider,
+    _build_openai_attempts, _build_vision_endpoint, _extract_json_object, _extract_openai_text,
+    analyze_uploaded_drawing, detect_vision_provider,
     parse_dxf_blueprint, recommend_tooling_for_blueprint,
 )
 
@@ -788,6 +789,13 @@ def test_drawing_shaft_h6_vs_hole_H7_and_small_holes():
     assert "models.github.ai/inference/chat/completions" in _build_vision_endpoint("github_pat_test123")
     assert detect_vision_provider("sk-or-v1-abc") == "openrouter_free"
     assert detect_vision_provider("github_pat_abc") == "github_models"
+    assert detect_vision_provider("gsk_abc123") == "groq_free"
+    assert "api.groq.com/openai/v1/chat/completions" in _build_vision_endpoint("gsk_abc123")
+    lbl_gh, att_gh = _build_openai_attempts("github_models", "github_pat_test")
+    assert lbl_gh == "GitHub Models" and att_gh[0][2]["Accept"] == "application/vnd.github+json"
+    assert "X-GitHub-Api-Version" in att_gh[0][2] and any("azure.com" in a[0] for a in att_gh)
+    txt_r, err_r = _extract_openai_text({"choices": [{"message": {"content": None, "refusal": "policy"}}]}) 
+    assert txt_r == "" and "Отказ" in (err_r or "")
     assert _extract_json_object("```json\n{\"part_name\":\"Втулка\"}\n```")["part_name"] == "Втулка"
 
 
@@ -813,4 +821,4 @@ if __name__ == "__main__":
     test_cad3d_step_brep_feature_recognition_and_tooling_kit()
     test_cad3d_stl_mesh_analyzer_and_housing_step()
     test_drawing_shaft_h6_vs_hole_H7_and_small_holes()
-    print("ALL SKM v2.3.6 MULTI-PROVIDER FREE VISION + 3D CAD TESTS (21 SUITES) PASSED!")
+    print("ALL SKM v2.3.8 GROQ + GITHUB MODELS + OPENROUTER VISION TESTS (21 SUITES) PASSED!")

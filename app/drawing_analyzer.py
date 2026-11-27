@@ -662,12 +662,13 @@ def _clean_api_key(api_key: Optional[str]) -> str:
 
 
 def resolve_vision_api_key(request_key: Optional[str] = None) -> str:
-    """Resolves Vision AI key from request or environment (supports OpenRouter, GitHub Models, AI Studio, Vertex)."""
+    """Resolves Vision AI key from request or environment (Groq, GitHub Models, OpenRouter, AI Studio, Vertex)."""
     for candidate in (
         request_key,
         os.getenv("VISION_API_KEY"),
-        os.getenv("OPENROUTER_API_KEY"),
+        os.getenv("GROQ_API_KEY"),
         os.getenv("GITHUB_MODELS_TOKEN"),
+        os.getenv("OPENROUTER_API_KEY"),
         os.getenv("GEMINI_API_KEY"),
     ):
         cleaned = _clean_api_key(candidate)
@@ -680,6 +681,8 @@ def detect_vision_provider(api_key: str) -> str:
     clean_key = _clean_api_key(api_key)
     if not clean_key:
         return "none"
+    if clean_key.startswith("gsk_"):
+        return "groq_free"
     if clean_key.startswith("sk-or-"):
         return "openrouter_free"
     if clean_key.startswith(("github_pat_", "ghp_")):
@@ -690,8 +693,10 @@ def detect_vision_provider(api_key: str) -> str:
 
 
 def _build_vision_endpoint(api_key: str, model: str = "gemini-2.5-flash", api_ver: str = "v1") -> str:
-    """Routes keys to OpenRouter, GitHub Models, Vertex AI Express Mode, or Gemini Developer API."""
+    """Routes keys to Groq, OpenRouter, GitHub Models, Vertex AI Express Mode, or Gemini Developer API."""
     clean_key = _clean_api_key(api_key)
+    if clean_key.startswith("gsk_"):
+        return "https://api.groq.com/openai/v1/chat/completions"
     if clean_key.startswith("sk-or-"):
         return "https://openrouter.ai/api/v1/chat/completions"
     if clean_key.startswith(("github_pat_", "ghp_")):
@@ -703,15 +708,182 @@ def _build_vision_endpoint(api_key: str, model: str = "gemini-2.5-flash", api_ve
 
 
 def _extract_json_object(raw_text: str) -> Dict[str, Any]:
-    txt = (raw_text or "").strip()
+    txt = (raw_text or "").lstrip("\ufeff").strip()
     txt = re.sub(r"^```(?:json)?\s*|\s*```$", "", txt, flags=re.IGNORECASE).strip()
     try:
-        return json.loads(txt)
+        obj = json.loads(txt)
+        if isinstance(obj, dict):
+            return obj
     except ValueError:
-        m = re.search(r"\{[\s\S]*\}", txt)
-        if m:
-            return json.loads(m.group(0))
-        raise
+        pass
+    m = re.search(r"\{[\s\S]*\}", txt)
+    if m:
+        obj = json.loads(m.group(0))
+        if isinstance(obj, dict):
+            return obj
+    raise ValueError(f"Модель вернула не JSON: {txt[:180] or '<пустой ответ>'}")
+
+
+def _extract_openai_text(body: Dict[str, Any]) -> Tuple[str, Optional[str]]:
+    """Extracts assistant text (or refusal/error) from OpenAI-compatible chat completion JSON."""
+    if isinstance(body.get("error"), dict):
+        return "", str(body["error"].get("message") or body["error"])[:220]
+    choices = body.get("choices") or []
+    if not choices:
+        return "", f"Нет choices в ответе: {json.dumps(body, ensure_ascii=False)[:200]}"
+    msg = choices[0].get("message") or {}
+    content = msg.get("content")
+    if isinstance(content, list):
+        content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
+    txt = str(content or "").strip()
+    if not txt:
+        # Some reasoning models place output into reasoning / reasoning_content if max_tokens hit
+        for rk in ("reasoning_content", "reasoning"):
+            if msg.get(rk):
+                txt = str(msg.get(rk)).strip()
+                break
+    if not txt and msg.get("refusal"):
+        return "", f"Отказ модели: {str(msg['refusal'])[:180]}"
+    return txt, None
+
+
+def _build_openai_attempts(provider: str, clean_key: str) -> Tuple[str, List[Tuple[str, str, Dict[str, str], bool]]]:
+    """
+    Returns (prov_label, list of (url, model_name, headers, use_json_format)) for OpenAI-compatible providers.
+    """
+    custom_model = _clean_api_key(os.getenv("VISION_MODEL"))
+    base_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {clean_key}",
+        "User-Agent": "SKM-Tooling-Selector/2.3.8",
+    }
+
+    if provider == "groq_free":
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        models = [
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "meta-llama/llama-4-maverick-17b-128e-instruct",
+        ]
+        if custom_model:
+            models = [custom_model] + [m for m in models if m != custom_model]
+        return "Groq Free", [(url, m, dict(base_headers), True) for m in models]
+
+    if provider == "openrouter_free":
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        hdrs = {
+            **base_headers,
+            "HTTP-Referer": "https://skm-tooling-selector.onrender.com",
+            "X-Title": "SKM Tooling Selector",
+        }
+        models = [
+            "openrouter/free",
+            "mistralai/mistral-small-3.1-24b-instruct:free",
+            "google/gemma-4-31b-it:free",
+        ]
+        if custom_model:
+            models = [custom_model] + [m for m in models if m != custom_model]
+        return "OpenRouter Free", [(url, m, dict(hdrs), False) for m in models]
+
+    # GitHub Models: official models.github.ai headers + fallback to legacy Azure endpoint
+    gh_headers = {
+        **base_headers,
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    az_headers = dict(base_headers)
+    attempts: List[Tuple[str, str, Dict[str, str], bool]] = []
+    if custom_model:
+        attempts.append(("https://models.github.ai/inference/chat/completions", custom_model, gh_headers, True))
+    attempts.extend([
+        ("https://models.github.ai/inference/chat/completions", "openai/gpt-4o-mini", gh_headers, True),
+        ("https://models.github.ai/inference/chat/completions", "openai/gpt-4.1-mini", gh_headers, False),
+        ("https://models.inference.ai.azure.com/chat/completions", "gpt-4o-mini", az_headers, True),
+    ])
+    return "GitHub Models", attempts
+
+
+def _read_json_http_response(req: urllib.request.Request, timeout: int = 20) -> Tuple[Dict[str, Any], int, str]:
+    """Executes request and parses JSON safely, reporting exact HTTP status/content-type/snippet on non-JSON."""
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        status = getattr(resp, "status", 200)
+        final_url = resp.geturl() if hasattr(resp, "geturl") else req.full_url
+        ctype = resp.headers.get("Content-Type", "unknown") if resp.headers else "unknown"
+        raw_bytes = resp.read()
+        raw_text = raw_bytes.decode("utf-8", errors="replace").lstrip("\ufeff").strip()
+    if not raw_text:
+        raise ValueError(f"Пустой ответ HTTP {status} (Content-Type: {ctype}, URL: {final_url.split('?')[0]})")
+    try:
+        parsed = json.loads(raw_text)
+    except ValueError as exc:
+        snippet = re.sub(r"\s+", " ", raw_text)[:180]
+        raise ValueError(f"Ответ не JSON (HTTP {status}, {ctype}): {snippet}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Неожиданный формат JSON (HTTP {status}): {raw_text[:160]}")
+    return parsed, status, final_url
+
+
+def test_vision_connection(api_key: Optional[str] = None) -> Dict[str, Any]:
+    """Quick diagnostic ping for /api/drawing/vision-test without uploading a drawing."""
+    clean_key = resolve_vision_api_key(api_key)
+    provider = detect_vision_provider(clean_key)
+    if not clean_key:
+        return {"ok": False, "provider": "none", "detail": "Ключ Vision AI не задан в Render Environment Variables."}
+
+    if provider in ("groq_free", "openrouter_free", "github_models"):
+        prov_label, attempts = _build_openai_attempts(provider, clean_key)
+        errors: List[str] = []
+        for url, model_name, hdrs, _ in attempts:
+            payload = {
+                "model": model_name,
+                "max_tokens": 40,
+                "temperature": 0,
+                "messages": [{"role": "user", "content": 'Return JSON {"status":"ok"}'}],
+            }
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=hdrs, method="POST")
+            try:
+                body, status, final_url = _read_json_http_response(req, timeout=14)
+                txt, err_msg = _extract_openai_text(body)
+                if err_msg:
+                    errors.append(f"{model_name}: {err_msg}")
+                    continue
+                return {
+                    "ok": True,
+                    "provider": provider,
+                    "provider_label": prov_label,
+                    "model": model_name,
+                    "endpoint": final_url.split("?")[0],
+                    "http_status": status,
+                    "reply": txt[:120],
+                }
+            except urllib.error.HTTPError as exc:
+                eb = ""
+                try:
+                    eb = exc.read().decode("utf-8", errors="ignore")[:220]
+                except Exception:
+                    pass
+                errors.append(f"{model_name} HTTP {exc.code}: {eb or exc.reason}")
+            except Exception as exc:
+                errors.append(f"{model_name}: {exc}")
+        return {"ok": False, "provider": provider, "provider_label": prov_label, "errors": errors}
+
+    # Google AI Studio / Vertex AI test ping
+    url = _build_vision_endpoint(clean_key, "gemini-2.5-flash", "v1")
+    payload = {"contents": [{"role": "user", "parts": [{"text": 'Return {"status":"ok"}'}]}]}
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        body, status, _ = _read_json_http_response(req, timeout=14)
+        txt = body["candidates"][0]["content"]["parts"][0]["text"]
+        return {"ok": True, "provider": provider, "http_status": status, "reply": str(txt)[:120]}
+    except urllib.error.HTTPError as exc:
+        eb = ""
+        try:
+            eb = exc.read().decode("utf-8", errors="ignore")[:240]
+        except Exception:
+            pass
+        return {"ok": False, "provider": provider, "http_status": exc.code, "error": eb or str(exc.reason)}
+    except Exception as exc:
+        return {"ok": False, "provider": provider, "error": str(exc)}
 
 
 def analyze_blueprint_with_gemini_vision(
@@ -727,8 +899,9 @@ def analyze_blueprint_with_gemini_vision(
     """
     Universal Vision AI REST client (stdlib urllib only) to read scanned raster blueprints.
     Auto-routes by key prefix:
-      - sk-or-*             -> OpenRouter Free Vision (no billing card required)
-      - github_pat_* / ghp_ -> GitHub Models gpt-4o-mini (no billing card required)
+      - gsk_*               -> Groq Free Vision (Llama 4 Scout, ~2s, no billing card)
+      - github_pat_* / ghp_ -> GitHub Models (gpt-4o-mini / gpt-4.1-mini, no billing card)
+      - sk-or-*             -> OpenRouter Free Vision (no billing card)
       - AIza*               -> Google AI Studio Gemini API
       - AQ.*                -> Vertex AI Express Mode
     """
@@ -761,59 +934,55 @@ def analyze_blueprint_with_gemini_vision(
     )
 
     data: Optional[Dict[str, Any]] = None
+    fallback_plain_text = ""
     last_err = ""
 
-    if provider in ("openrouter_free", "github_models"):
-        url = _build_vision_endpoint(clean_key)
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {clean_key}",
-        }
-        custom_model = _clean_api_key(os.getenv("VISION_MODEL"))
-        if provider == "openrouter_free":
-            headers["HTTP-Referer"] = "https://skm-tooling-selector.onrender.com"
-            headers["X-Title"] = "SKM Tooling Selector"
-            models = ["openrouter/free", "google/gemma-4-31b-it:free", "google/gemma-3-27b-it:free"]
-            prov_label = "OpenRouter Free"
-        else:
-            models = ["openai/gpt-4o-mini", "openai/gpt-4.1-mini"]
-            prov_label = "GitHub Models"
-        if custom_model:
-            models = [custom_model] + [m for m in models if m != custom_model]
-
+    if provider in ("groq_free", "openrouter_free", "github_models"):
+        prov_label, attempts = _build_openai_attempts(provider, clean_key)
         data_uri = f"data:{mime_type};base64,{b64_img}"
         attempt_errors: List[str] = []
-        for model_name in models:
+
+        for url, model_name, hdrs, use_json_fmt in attempts:
+            img_obj: Dict[str, Any] = {"url": data_uri}
+            if provider == "github_models":
+                img_obj["detail"] = "high"
             payload: Dict[str, Any] = {
                 "model": model_name,
                 "temperature": 0.1,
-                "max_tokens": 1400,
+                "max_tokens": 2200,
                 "messages": [
                     {
                         "role": "user",
                         "content": [
                             {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": data_uri}},
+                            {"type": "image_url", "image_url": img_obj},
                         ],
                     }
                 ],
             }
-            if provider == "github_models":
+            if use_json_fmt:
                 payload["response_format"] = {"type": "json_object"}
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers=headers,
+                headers=hdrs,
                 method="POST",
             )
             try:
-                with urllib.request.urlopen(req, timeout=18) as resp:
-                    body = json.loads(resp.read().decode("utf-8"))
-                msg_content = body["choices"][0]["message"]["content"]
-                if isinstance(msg_content, list):
-                    msg_content = "".join(p.get("text", "") for p in msg_content if isinstance(p, dict))
-                data = _extract_json_object(str(msg_content))
-                break
+                body, _, _ = _read_json_http_response(req, timeout=20)
+                msg_text, extract_err = _extract_openai_text(body)
+                if extract_err:
+                    attempt_errors.append(f"{prov_label} ({model_name}): {extract_err}")
+                    continue
+                try:
+                    data = _extract_json_object(msg_text)
+                    break
+                except ValueError as jerr:
+                    # Save plain text in case model described dimensions without JSON wrapper
+                    if len(msg_text) >= 25 and not fallback_plain_text:
+                        fallback_plain_text = msg_text
+                    attempt_errors.append(f"{prov_label} ({model_name}): {jerr}")
+                    continue
             except urllib.error.HTTPError as exc:
                 err_body = ""
                 try:
@@ -823,14 +992,16 @@ def analyze_blueprint_with_gemini_vision(
                 err_msg = f"{prov_label} ({model_name}) HTTP {exc.code}: {err_body or exc.reason}"
                 attempt_errors.append(err_msg)
                 last_err = f"Ошибка {err_msg}"
-                if exc.code in (401, 403):
+                # For GitHub Models, still try Azure fallback on 401/403/404; for others stop on 401/403
+                if exc.code in (401, 403) and provider != "github_models":
                     break
             except (urllib.error.URLError, KeyError, ValueError, TimeoutError, OSError) as exc:
                 err_msg = f"{prov_label} ({model_name}): {exc}"
                 attempt_errors.append(err_msg)
                 last_err = f"Сбой запроса {err_msg}"
                 continue
-        if data is None and len(attempt_errors) > 1:
+
+        if data is None and attempt_errors:
             last_err = " | ".join(attempt_errors[:3])
     else:
         payload = {
@@ -845,40 +1016,51 @@ def analyze_blueprint_with_gemini_vision(
             ],
             "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
         }
-        attempts = (
+        attempts_g = (
             [("gemini-2.5-flash", "v1"), ("gemini-2.5-flash", "v1beta1"), ("gemini-2.0-flash", "v1")]
             if provider == "vertex_ai_aq"
             else [("gemini-2.5-flash", "v1beta"), ("gemini-2.0-flash", "v1beta")]
         )
-        for model_name, api_ver in attempts:
+        for model_name, api_ver in attempts_g:
             url = _build_vision_endpoint(clean_key, model_name, api_ver)
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "User-Agent": "SKM-Tooling-Selector/2.3.8"},
                 method="POST",
             )
             try:
-                with urllib.request.urlopen(req, timeout=35) as resp:
-                    body = json.loads(resp.read().decode("utf-8"))
+                body, _, _ = _read_json_http_response(req, timeout=25)
                 text_out = body["candidates"][0]["content"]["parts"][0]["text"]
                 data = _extract_json_object(text_out)
                 break
             except urllib.error.HTTPError as exc:
                 err_body = ""
                 try:
-                    err_body = exc.read().decode("utf-8", errors="ignore")[:260]
+                    err_body = exc.read().decode("utf-8", errors="ignore")[:240]
                 except Exception:
                     pass
                 prov_label = "Vertex AI (AQ.*)" if provider == "vertex_ai_aq" else "Gemini AI Studio (AIza*)"
                 last_err = f"Ошибка {prov_label} ({model_name}/{api_ver}) HTTP {exc.code}: {err_body or exc.reason}"
                 if exc.code not in (404, 400):
                     break
-            except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as exc:
+            except (urllib.error.URLError, KeyError, ValueError, TimeoutError, OSError) as exc:
                 last_err = f"Сбой запроса Vision AI ({model_name}): {exc}"
                 break
 
     if data is None:
+        # Smart fallback: if Vision AI returned readable ESKD dimensions as plain text, parse them!
+        if fallback_plain_text and re.search(r"(?:Ø|ø|H7|H8|IT6|M\d|Ra|сталь|втулк|вал|фланец)", fallback_plain_text, re.IGNORECASE):
+            spec_fb = parse_drawing_annotations(
+                text=fallback_plain_text,
+                part_name=filename.rsplit(".", 1)[0] if "." in filename else filename,
+                batch_qty=batch_qty,
+                stability=stability,
+                include_holders=include_holders,
+            )
+            for f_item in spec_fb.features:
+                f_item.source = "VISION_AI"
+            return spec_fb
         if error_out is not None and last_err:
             error_out.append(last_err)
         return None

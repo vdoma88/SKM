@@ -1356,7 +1356,7 @@
             const b = document.getElementById("connBadge");
             const t = document.getElementById("connText");
             if (b) { b.classList.remove("demo"); b.classList.add("live"); }
-            if (t) t.textContent = "FastAPI Live v2.3.7";
+            if (t) t.textContent = "FastAPI Live v2.3.8";
           }
         } else {
           apiFailReason = `Сервер /api/drawing/analyze вернул HTTP ${resp.status}`;
