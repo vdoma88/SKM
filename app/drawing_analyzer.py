@@ -656,11 +656,15 @@ def parse_drawing_annotations(
     )
 
 
-def _build_vision_endpoint(api_key: str, model: str = "gemini-2.5-flash") -> str:
+def _clean_api_key(api_key: Optional[str]) -> str:
+    return (api_key or "").strip().strip('"').strip("'")
+
+
+def _build_vision_endpoint(api_key: str, model: str = "gemini-2.5-flash", api_ver: str = "v1") -> str:
     """Routes AQ.* keys to Vertex AI Express Mode and AIza* keys to Gemini Developer API."""
-    clean_key = (api_key or "").strip()
+    clean_key = _clean_api_key(api_key)
     if clean_key.startswith("AQ."):
-        return f"https://aiplatform.googleapis.com/v1/publishers/google/models/{model}:generateContent?key={clean_key}"
+        return f"https://aiplatform.googleapis.com/{api_ver}/publishers/google/models/{model}:generateContent?key={clean_key}"
     return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
 
 
@@ -717,32 +721,47 @@ def analyze_blueprint_with_gemini_vision(
         ],
         "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
     }
-    url = _build_vision_endpoint(clean_key, "gemini-2.5-flash")
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
+    clean_key = _clean_api_key(clean_key)
+    attempts = (
+        [("gemini-2.5-flash", "v1"), ("gemini-2.5-flash", "v1beta1"), ("gemini-2.0-flash", "v1")]
+        if clean_key.startswith("AQ.")
+        else [("gemini-2.5-flash", "v1beta"), ("gemini-2.0-flash", "v1beta")]
     )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-        text_out = body["candidates"][0]["content"]["parts"][0]["text"]
-        text_out = re.sub(r"^```json\s*|\s*```$", "", text_out.strip())
-        data = json.loads(text_out)
-    except urllib.error.HTTPError as exc:
-        err_body = ""
+    data = None
+    last_err = ""
+    for model_name, api_ver in attempts:
+        url = _build_vision_endpoint(clean_key, model_name, api_ver)
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         try:
-            err_body = exc.read().decode("utf-8", errors="ignore")[:220]
-        except Exception:
-            pass
-        if error_out is not None:
+            with urllib.request.urlopen(req, timeout=35) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            text_out = body["candidates"][0]["content"]["parts"][0]["text"]
+            text_out = re.sub(r"^```json\s*|\s*```$", "", text_out.strip())
+            data = json.loads(text_out)
+            break
+        except urllib.error.HTTPError as exc:
+            err_body = ""
+            try:
+                err_body = exc.read().decode("utf-8", errors="ignore")[:260]
+            except Exception:
+                pass
             provider = "Vertex AI (AQ.*)" if clean_key.startswith("AQ.") else "Gemini AI Studio (AIza*)"
-            error_out.append(f"Ошибка {provider} HTTP {exc.code}: {err_body or exc.reason}")
-        return None
-    except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as exc:
-        if error_out is not None:
-            error_out.append(f"Сбой запроса Vision AI: {exc}")
+            last_err = f"Ошибка {provider} ({model_name}/{api_ver}) HTTP {exc.code}: {err_body or exc.reason}"
+            # Retry next model/version only on 404 (model/path not found) or 400
+            if exc.code not in (404, 400):
+                break
+        except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as exc:
+            last_err = f"Сбой запроса Vision AI ({model_name}): {exc}"
+            break
+
+    if data is None:
+        if error_out is not None and last_err:
+            error_out.append(last_err)
         return None
 
     sg, grp, mat_disp, hrc_val = detect_material(str(data.get("material_text", "")))
@@ -1271,7 +1290,7 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
         if pdf_txt.strip():
             extracted_text = (extracted_text + "\n" + pdf_txt).strip()
             method = "PDF_TEXT_ESKD_PARSER"
-        api_key = req.gemini_api_key or os.getenv("GEMINI_API_KEY")
+        api_key = _clean_api_key(req.gemini_api_key or os.getenv("GEMINI_API_KEY"))
         if not pdf_txt.strip() and api_key:
             vision_spec = analyze_blueprint_with_gemini_vision(
                 raw_bytes, "application/pdf", api_key, fname, req.batch_qty, req.stability, req.include_holders, error_out=vision_errors
@@ -1281,7 +1300,7 @@ def analyze_uploaded_drawing(repo: Any, req: DrawingAnalyzeRequest) -> DrawingAn
 
     elif ext in ("png", "jpg", "jpeg", "webp", "bmp") and raw_bytes:
         mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
-        api_key = req.gemini_api_key or os.getenv("GEMINI_API_KEY")
+        api_key = _clean_api_key(req.gemini_api_key or os.getenv("GEMINI_API_KEY"))
         if api_key:
             vision_spec = analyze_blueprint_with_gemini_vision(
                 raw_bytes, mime, api_key, fname, req.batch_qty, req.stability, req.include_holders, error_out=vision_errors

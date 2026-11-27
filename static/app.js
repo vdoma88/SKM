@@ -2973,25 +2973,25 @@ async function init() {
   if (isStaticHost) {
     state.apiLive = false;
     badge.classList.add("demo");
-    connText.textContent = "Web Demo · v2.3 3D CAD";
+    connText.textContent = "Web Demo · v2.3.4 3D CAD";
   } else {
     try {
-      const r = await fetch(`${state.apiBase}/api/health`, { signal: AbortSignal.timeout(1200) });
+      const r = await fetch(`${state.apiBase}/api/health`, { signal: AbortSignal.timeout(15000) });
       if (r.ok) {
         state.apiLive = true;
         badge.classList.add("live");
         const metaRes = await fetch(`${state.apiBase}/api/catalog/meta`);
         if (metaRes.ok) {
           const meta = await metaRes.json();
-          connText.textContent = meta.storage_mode === "postgres" ? "FastAPI + PostgreSQL" : "FastAPI Live v2.3";
+          connText.textContent = meta.storage_mode === "postgres" ? "FastAPI + PostgreSQL" : "FastAPI Live v2.3.4";
           if (meta.machines?.length) { FALLBACK_DB.machines = meta.machines; renderMachineSelect(); }
           if (meta.material_subgroups?.length) { FALLBACK_DB.subgroups = meta.material_subgroups; populateSubgroups(); }
         } else {
-          connText.textContent = "FastAPI Live v2.3";
+          connText.textContent = "FastAPI Live v2.3.4";
         }
       } else {
         badge.classList.add("demo");
-        connText.textContent = "Web Demo · v2.3 3D CAD";
+        connText.textContent = "Web Demo · v2.3.4 3D CAD";
       }
     } catch {
       badge.classList.add("demo");

@@ -1255,9 +1255,11 @@
       ctrl.notesText = txt;
     }
 
-    // Try Live FastAPI /api/drawing/analyze first (handles PDF zlib extraction + DXF + Vision AI)
+    // Try Live FastAPI /api/drawing/analyze on any HTTP backend (even if initial /api/health timed out on Render wake-up!)
     let handledByApi = false;
-    if (global.state && global.state.apiLive) {
+    let apiFailReason = "";
+    const isStaticHost = window.location.protocol === "file:" || window.location.hostname.endsWith("github.io");
+    if (global.state && (!isStaticHost || global.state.apiLive)) {
       try {
         const resp = await fetch(`${global.state.apiBase}/api/drawing/analyze`, {
           method: "POST",
@@ -1284,8 +1286,19 @@
           drawingState.spec = data.plan.spec;
           drawingState.plan = data.plan;
           handledByApi = true;
+          if (!global.state.apiLive) {
+            global.state.apiLive = true;
+            const b = document.getElementById("connBadge");
+            const t = document.getElementById("connText");
+            if (b) { b.classList.remove("demo"); b.classList.add("live"); }
+            if (t) t.textContent = "FastAPI Live v2.3.4";
+          }
+        } else {
+          apiFailReason = `Сервер /api/drawing/analyze вернул HTTP ${resp.status}`;
         }
-      } catch {}
+      } catch (e) {
+        apiFailReason = `Нет связи с сервером Render: ${e && e.message ? e.message : e}`;
+      }
     }
 
     if (!handledByApi) {
@@ -1329,7 +1342,9 @@
 
     if (drawingState.analysisMethod === "IMAGE_PREVIEW_AND_TT" && !(document.getElementById("drwNotesInput")?.value || "").trim()) {
       drawingState.plan.warnings = drawingState.plan.warnings || [];
-      if (!drawingState.plan.warnings.some((w) => w.includes("GEMINI_API_KEY"))) {
+      if (apiFailReason && !drawingState.plan.warnings.length) {
+        drawingState.plan.warnings.unshift(`${apiFailReason}. Проверьте статус сервера /api/health.`);
+      } else if (!drawingState.plan.warnings.length) {
         drawingState.plan.warnings.unshift(
           "Для автоматического чтения фото/скана (JPG/PNG) добавьте GEMINI_API_KEY в Render или через кнопку «🤖 ИИ-зрение для сканов», либо впишите основные размеры в поле ТТ ниже."
         );
@@ -1406,7 +1421,7 @@
     if (badge) badge.textContent = "🤖 Gemini / Vertex AI читает чертёж...";
 
     // Prefer FastAPI backend proxy (supports AQ.* Vertex AI & AIza* without browser CORS issues)
-    if (global.state && global.state.apiLive) {
+    if (global.state && (window.location.protocol !== "file:" && !window.location.hostname.endsWith("github.io"))) {
       try {
         const resp = await fetch(`${global.state.apiBase}/api/drawing/analyze`, {
           method: "POST",

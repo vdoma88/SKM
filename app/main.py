@@ -3,6 +3,7 @@ FastAPI Backend for SKM — Vendor-Agnostic Indexable Insert & Tooling Selector 
 Run locally: uvicorn app.main:app --reload --port 8000
 """
 
+import os
 from pathlib import Path
 from typing import Optional, List, Literal, Dict, Any
 from fastapi import FastAPI, HTTPException, Query, Body
@@ -40,7 +41,7 @@ from app.sales import (
 
 app = FastAPI(
     title="SKM · ISO Tooling Selector API",
-    version="2.3.0",
+    version="2.3.4",
     description=(
         "Vendor-agnostic indexable insert selector with ISO 1832 parser, Kienzle physics, "
         "Taylor tool-life economics, shop-floor warehouse stock, 3D STL/STEP geometry, "
@@ -201,7 +202,20 @@ def serve_sw():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "2.3.0", "storage_mode": repo.mode}
+    raw_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    if raw_key.startswith("AQ."):
+        v_prov = "vertex_ai_aq"
+    elif raw_key:
+        v_prov = "ai_studio_aiza"
+    else:
+        v_prov = "none"
+    return {
+        "status": "ok",
+        "version": "2.3.4",
+        "storage_mode": repo.mode,
+        "vision_configured": bool(raw_key),
+        "vision_provider": v_prov,
+    }
 
 
 @app.get("/api/catalog/meta")

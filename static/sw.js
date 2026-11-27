@@ -1,4 +1,4 @@
-const CACHE_NAME = "skm-studio-v2.3";
+const CACHE_NAME = "skm-studio-v2.3.4";
 const CORE_ASSETS = [
   "./",
   "./index.html",
